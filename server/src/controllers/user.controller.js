@@ -8,7 +8,7 @@ import jwt from 'jsonwebtoken';
 //     secure: false,
 // } 
 
-const cookieOptions = {
+const options = {
         httpOnly: true,
         secure: true, 
         sameSite: 'None', 

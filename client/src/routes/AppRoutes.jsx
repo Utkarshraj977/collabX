@@ -9,10 +9,8 @@ import Dashboard from '../pages/Dashboard';
 import WorkspaceLayout from '../components/layout/WorkspaceLayout';
 import Channel from '../pages/ChannelPage';
 
-// 🔥 IMPORT MEET COMPONENT
 import Meet from '../pages/Meet';
 
-// --- GUARDS ---
 const PrivateRoute = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
@@ -23,7 +21,6 @@ const PublicRoute = () => {
   return !isAuthenticated ? <Outlet /> : <Navigate to="/dashboard" replace />;
 };
 
-// 🔥 WRAPPER: Extracts 'channelId' from URL and passes it to Meet component
 const MeetWrapper = () => {
     const { channelId } = useParams();
     return <Meet channelId={channelId} />;
@@ -44,13 +41,10 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/workspace" element={<Workspace />} />
         
-        {/* Workspace Layout (Sidebar + Channel) */}
         <Route path="/workspace/:workspaceId" element={<WorkspaceLayout />}>
            <Route path="channel/:channelId" element={<Channel />} />
         </Route>
 
-        {/* 🔥 NEW ROUTE: VIDEO CALL LOBBY */}
-        {/* We keep this outside WorkspaceLayout so it can take up the full screen */}
         <Route path="/meet/:channelId" element={<MeetWrapper />} />
 
       </Route>
