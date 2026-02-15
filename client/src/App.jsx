@@ -7,7 +7,7 @@ import { connectSocket, disconnectSocket } from "./services/socket";
 
 // 🔥 IMPORT THESE TWO
 import { VideoProvider } from "./components/VideoContext";
-import CallOverlay from "./components/CallOverLay";
+import CallOverlay from "./components/CallOverlay";
 
 export default function App() {
   const dispatch = useDispatch();
