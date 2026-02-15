@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { Outlet, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import Sidebar from "../ui/sidebar";
+import Sidebar from "../ui/Sidebar"
+
 import { fetchChannelInWS, fetchMyWorkspace, fetchWorkSpaceByid } from "../../features/workspace/workspaceSlice";
 
 export default function WorkspaceLayout() {
