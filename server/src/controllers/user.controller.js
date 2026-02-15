@@ -3,10 +3,17 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import jwt from 'jsonwebtoken';
 
-const options = {
-    httpOnly: true,
-    secure: false,
-}
+// const options = {
+//     httpOnly: true,
+//     secure: false,
+// } 
+
+const cookieOptions = {
+        httpOnly: true,
+        secure: true, 
+        sameSite: 'None', 
+        maxAge: 2 * 24 * 60 * 60 * 1000
+};
 
 const generateAccessTokenAndRefreshToken = async (userId) => {
     try {

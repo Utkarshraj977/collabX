@@ -5,19 +5,17 @@ import AppRoutes from "./routes/AppRoutes";
 import { Toaster } from 'react-hot-toast';
 import { connectSocket, disconnectSocket } from "./services/socket";
 
-// 🔥 IMPORT THESE TWO
 import { VideoProvider } from "./components/VideoContext";
 import CallOverlay from "./components/CallOverlay";
 
 export default function App() {
   const dispatch = useDispatch();
-  const { loading, user } = useSelector((state) => state.auth); 
+  const { loading, user } = useSelector((state) => state.auth);
 
   useEffect(() => {
     dispatch(loadUser());
   }, [dispatch]);
 
-  // Socket Connection Logic
   useEffect(() => {
     const userToken = user?.token || user?.refreshtoken;
 
@@ -58,17 +56,9 @@ export default function App() {
           </div>
         </div>
       ) : (
-        // 🔥 HERE IS THE INTEGRATION
-        // We wrap the entire AppRoutes in VideoProvider.
-        // This ensures that when you change routes (e.g. go to Chat), the VideoContext stays alive.
         <VideoProvider>
-          
-          {/* This is the Floating Window (Zoom Style) */}
-          <CallOverlay />
-          
-          {/* Your existing pages */}
-          <AppRoutes />
-          
+            <CallOverlay />
+            <AppRoutes />
         </VideoProvider>
       )}
     </>
