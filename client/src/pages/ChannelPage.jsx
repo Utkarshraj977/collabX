@@ -3,7 +3,7 @@ import { useState,useEffect } from "react";
 import { MessageSquare, ListTodo, Video, GitBranch } from "lucide-react";
 import Chat from "./Chat";
 import Tasks from "./Tasks";
-import GitHub from "./Github";
+import GitHub from "./GitHub";
 import Meet from "./Meet";
 import { fetchChannelById } from "../features/workspace/workspaceSlice";
 import { useDispatch,useSelector } from "react-redux";
