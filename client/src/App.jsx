@@ -7,7 +7,7 @@ import { connectSocket, disconnectSocket } from "./services/socket";
 
 import { VideoProvider } from "./components/VideoContext";
 import CallOverlay from "./components/CallOverlay";
-
+ 
 export default function App() {
   const dispatch = useDispatch();
   const { loading, user } = useSelector((state) => state.auth);
@@ -26,7 +26,7 @@ export default function App() {
     }
 
     return () => disconnectSocket();
-  }, [user]);
+  }, [user]); 
 
   return (
     <>

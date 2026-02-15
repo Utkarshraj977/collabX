@@ -49,8 +49,8 @@ export default function Chat({ channelId }) {
         if (!socket) {
             socket = io(import.meta.env.MAIN_URL, { 
                 auth: { token: userToken },
-                transports: ["websocket"],
-            });
+                transports: ["websocket","polling"],
+            }); 
         }
 
         // B. Room Join Logic
@@ -96,21 +96,17 @@ export default function Chat({ channelId }) {
             }
         };
 
-        // 🛑 MAGIC FIX: Pehle purane listeners saaf karo
-        // Isse wo 8 baar print hone wali problem khatam ho jayegi
         socket.off("new-message");
 
-        // ✅ Phir naya listener lagao
         socket.on("new-message", handleNewMessage);
 
-        // Cleanup on unmount or dependency change
         return () => {
             socket.off("new-message", handleNewMessage);
             socket.off("connect", joinChannelRoom);
         };
 
-    }, [channelId, user?._id, dispatch]); // Dependencies
-    // STEP 4: Infinite Scroll (Load Older Messages)
+    }, [channelId, user?._id, dispatch]); 
+
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight } = e.target;
 
@@ -131,7 +127,6 @@ export default function Chat({ channelId }) {
         }
     };
 
-    // STEP 5: Scroll Position Management
     useLayoutEffect(() => {
         if (isFetchingOld && containerRef.current) {
             const newScrollHeight = containerRef.current.scrollHeight;
@@ -149,8 +144,7 @@ export default function Chat({ channelId }) {
     e.preventDefault();
     if (!input.trim() && !selectedFile) return;
 
-    // 🔥 NEW LOGIC: COMMAND DETECTION (/summarize)
-    // Ye check karega: "/summarize" ya "/summarize(30)"
+    //  "/summarize" ya "/summarize(30)"
     const commandRegex = /^\/summarize(?:\((\d+)\))?$/i;
     const match = input.trim().match(commandRegex);
 

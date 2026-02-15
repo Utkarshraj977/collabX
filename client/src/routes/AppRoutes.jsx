@@ -10,6 +10,7 @@ import WorkspaceLayout from '../components/layout/WorkspaceLayout';
 import Channel from '../pages/ChannelPage';
 
 import Meet from '../pages/Meet';
+import NotFound from '../pages/NotFound';
 
 const PrivateRoute = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
@@ -20,7 +21,7 @@ const PublicRoute = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
   return !isAuthenticated ? <Outlet /> : <Navigate to="/dashboard" replace />;
 };
-
+ 
 const MeetWrapper = () => {
     const { channelId } = useParams();
     return <Meet channelId={channelId} />;
@@ -49,7 +50,7 @@ const AppRoutes = () => {
 
       </Route>
 
-      <Route path="*" element={<div>404 Not Found</div>} />
+      <Route path="*" element={<NotFound/>} />
     </Routes>
   );
 };
