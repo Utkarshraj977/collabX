@@ -7,30 +7,24 @@ import { loginSuccess } from "../features/auth/authSlice"; // Redux Action
 
 
 export default function Login() {
-  // 3. State 'null' ki jagah empty string "" rakho
   const [email, setEmail] = useState(""); 
-  const [password, setPassword] = useState(""); // Login me Name nahi, Password hota hai
-
+  const [password, setPassword] = useState(""); 
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  // 4. Function ko 'async' banao
   const handleLogin = async (e) => {
-      e.preventDefault(); // 5. Spelling corrected (Capital D)
+      e.preventDefault(); 
       
       try {
-        // 6. API call karo aur data pass karo
         const response = await login({ email, password });
   
-        // 7. Redux Store me data save karo
-        dispatch(loginSuccess(response.data)); // Backend se jo user data aaya wo bhejo
+        dispatch(loginSuccess(response.data.data)); 
 
-        // 8. Dashboard par bhej do
         navigate("/dashboard"); 
         
       } catch (error) {
           console.error("Login Failed:", error);
-          alert("Invalid Email or Password"); // Simple alert for now
+          alert("Invalid Email or Password"); 
       }
   }
 
@@ -41,7 +35,6 @@ export default function Login() {
         
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           
-          {/* Email Input */}
           <label className="text-sm text-text-muted block">Email</label>
           <input 
             type="email" 
@@ -52,7 +45,6 @@ export default function Login() {
             required
           />
 
-          {/* Password Input */}
           <label className="text-sm text-text-muted block">Name</label>
           <input 
             type="password" 
@@ -63,7 +55,6 @@ export default function Login() {
             required
           />
 
-          {/* Submit Button */}
           <button 
             type="submit" 
             className="bg-secondary hover:bg-text-muted text-white font-bold py-2 px-4 rounded transition"

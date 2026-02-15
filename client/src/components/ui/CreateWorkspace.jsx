@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useDispatch } from "react-redux"; 
 import { createworkspace } from "../../services/api";
 import { addWorkspace } from "../../features/workspace/workspaceSlice"; 
+import toast from "react-hot-toast";
 
 export default function CreateWorkspace() {
     const [isOpen, setIsOpen] = useState(false);
@@ -22,6 +23,7 @@ export default function CreateWorkspace() {
             setName("");
 
         } catch (error) {
+            toast.error(error.message || "Error creating workspace")
             console.error("Error creating workspace:", error);
         }
     };

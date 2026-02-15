@@ -22,6 +22,7 @@ export default function CreateChannelModal({ onClose, workspaceId }) {
 
             onClose();
         } catch (error) {
+            toast.error("something went wrong")
             console.error(error);
         } finally {
             setIsLoading(false);

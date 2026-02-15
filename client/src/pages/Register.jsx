@@ -16,20 +16,16 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // ⚠️ IMPORTANT: Image upload ke liye FormData banana padta hai
     const formData = new FormData();
     formData.append("name", name);
     formData.append("email", email);
     formData.append("password", password);
     if (file) {
-      formData.append("avatar", file); // 'avatar' wo key hai jo backend me multer expect karega
+      formData.append("avatar", file); 
     }
 
     try {
-      // Ab hum object {} nahi, formData bhej rahe hain
       const response = await register(formData);
-      
-      dispatch(loginSuccess(response.data.data)); // Redux me user save
       navigate('/login'); // Redirect
       
     } catch (error) {
