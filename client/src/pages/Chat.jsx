@@ -47,9 +47,9 @@ export default function Chat({ channelId }) {
 
         // A. Connection Initialize (Singleton Pattern)
         if (!socket) {
-            socket = io(import.meta.env.MAIN_URL, { 
+            socket = io(import.meta.env.VITE_MAIN_URL, { 
                 auth: { token: userToken },
-                transports: ["websocket","polling"],
+                transports: ["websocket"],
             }); 
         }
 
@@ -149,23 +149,15 @@ export default function Chat({ channelId }) {
     const match = input.trim().match(commandRegex);
 
     if (match) {
-        // Agar ye command hai...
-        const limit = match[1] ? parseInt(match[1]) : 10; // Default 10 agar number nahi diya
-
-        // 1. Input clear karo (User ko lage command chali gayi)
+        const limit = match[1] ? parseInt(match[1]) : 10;
         setInput(""); 
 
         try {
-            // 2. Direct API Call karo (Redux ki zaroorat nahi)
-            // Backend khud AI run karega aur Socket se jawab bhejega
             await triggerManualSummary(channelId, limit);
         } catch (error) {
             toast.error("something went wrong!!");
-            // Optional: Toast error dikha sakte ho
         }
-        
-        // 🛑 RETURN: Yahi ruk jao, neeche wala normal message logic mat chalao
-        return; 
+                return; 
     }
 
     const messageData = {

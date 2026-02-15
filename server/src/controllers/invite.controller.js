@@ -22,7 +22,7 @@ const createInviteLink = asyncHandler(async(req, res) => {
         inviterId: userId,
         token,
         role: role || 'member',
-        expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 
+        expiresAt: Date.now() + 1 * 24 * 60 * 60 * 1000 
     });
 
     const inviteUrl = `${process.env.FRONTEND_URL}/invite/ws/${token}`;

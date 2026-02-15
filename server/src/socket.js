@@ -16,9 +16,7 @@ const initializeSocket = (httpServer) => {
     // 2. Setup IO with Correct CORS
     io = new Server(httpServer, {
         cors: {
-            // ❌ FIXED: import.meta.env works only in Vite (Frontend). 
-            // In Backend, use process.env or specific URL.
-            origin: process.env.FRONTEND_URL || "http://localhost:5173",
+            origin: process.env.FRONTEND_URL ,
             methods: ["GET", "POST"],
             credentials: true
         }
