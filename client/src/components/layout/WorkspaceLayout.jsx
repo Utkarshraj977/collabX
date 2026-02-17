@@ -10,16 +10,24 @@ export default function WorkspaceLayout() {
   const { workspaceId } = useParams();
   const { loading, currentWorkspace, myWorkspaces, joinedWorkspaces } = useSelector((state) => state.workspace);
 
+  // Effect 1: Workspaces aur Profile fetch karne ke liye
   useEffect(() => {
     if (workspaceId && currentWorkspace?._id !== workspaceId) {
       dispatch(fetchWorkSpaceByid(workspaceId));
     }
-    if ((!myWorkspaces || myWorkspaces.length === 0) && (!joinedWorkspaces || joinedWorkspaces.length === 0)) {
+    if (!myWorkspaces?.length && !joinedWorkspaces?.length) {
       dispatch(fetchMyWorkspace());
     }
-    dispatch(fetchChannelInWS(workspaceId));
   }, [dispatch, workspaceId, currentWorkspace?._id, myWorkspaces?.length, joinedWorkspaces?.length]);
+
   
+  useEffect(() => {
+    if (workspaceId) {
+      dispatch(fetchChannelInWS(workspaceId));
+    }
+  }, [dispatch, workspaceId]); 
+
+
   const isTransitioning = currentWorkspace?._id !== workspaceId;
   if (loading && isTransitioning) {
     return (

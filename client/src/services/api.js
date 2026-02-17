@@ -7,7 +7,7 @@ const api = axios.create({
 
 
 //---------------Auth-----------------
-
+ 
 export const register = async (data) => {
   return api.post("/users/register", data);
 }

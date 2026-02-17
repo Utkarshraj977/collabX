@@ -13,5 +13,5 @@ router.route("/:channelId/suggestions").get(getChannelSuggestions);
 router.route("/:channelId/getchannelbyid").get(getchannelbyid);
 router.get("/check-membership/:channelId", checkChannelMembership);
 
-export default router;
+export default router; 
 

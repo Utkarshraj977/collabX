@@ -19,7 +19,8 @@ export default function CreateChannelModal({ onClose, workspaceId }) {
                 workspaceId,
                 channelData: { name, description }
             })).unwrap();
-
+            await dispatch(fetchChannelInWS(workspaceId));
+            toast.success("Channel created!");
             onClose();
         } catch (error) {
             toast.error("something went wrong")

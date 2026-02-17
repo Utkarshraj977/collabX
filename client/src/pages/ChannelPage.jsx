@@ -19,7 +19,7 @@ export default function ChannelPage() {
     { id: "github", label: "GitHub", icon: GitBranch },
     { id: "meet", label: "Meet", icon: Video },
   ];
-  
+   
   useEffect(() => {
     if (channelId) {
       dispatch(fetchChannelById(channelId));
