@@ -3,6 +3,7 @@ import ChannelMember from "../models/ChannelMember.js";
 import Workspace from "../models/Workspace.js";
 import WorkspaceMember from "../models/WorkspaceMember.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import redis from "../config/redis.js";
 
 //channel creation
 const createChannel = asyncHandler(async(req, res) => {
@@ -65,34 +66,62 @@ const createChannel = asyncHandler(async(req, res) => {
 //List All Channels of a workspace
 const getWorkspaceChannels = asyncHandler(async(req, res) => {
     const { workspaceId } = req.params;
-    const userId = req.user._id;
+    const userId = req.user._id.toString();
+    const cacheKey = `channels:${workspaceId}:${userId}`;
 
-    const isWorkspaceMember = await WorkspaceMember.findOne({ workspaceId, userId });
+    try {
+        // 1. Check Redis Cache First
+        const cachedChannels = await redis.get(cacheKey);
+        if (cachedChannels) {
+            return res.status(200).json({
+                success: true,
+                data: JSON.parse(cachedChannels)
+            });
+        }
 
-    if (!isWorkspaceMember) {
-        return res.status(403).json({ message: "You are not a member of this workspace" });
+        const isWorkspaceMember = await WorkspaceMember.findOne({ workspaceId, userId });
+
+        if (!isWorkspaceMember) {
+            return res.status(403).json({ message: "You are not a member of this workspace" });
+        }
+
+        const userChannelMemberships = await ChannelMember.find({ 
+            workspaceId, 
+            userId 
+        }).lean();
+        
+        const myChannelIds = userChannelMemberships.map(m => m.channelId);
+
+        const channels = await Channel.find({
+            workspaceId: workspaceId,
+            isArchived: false, 
+            $or: [
+                { isPrivate: false },
+                { _id: { $in: myChannelIds } }
+            ]
+        }).lean();
+        await redis.setex(cacheKey, 1800, JSON.stringify(channels));
+
+        return res.status(200).json({
+            success: true,
+            data: channels
+        });
+
+    } catch (error) {
+        console.error("Redis Error in getWorkspaceChannels:", error);
+        const isWorkspaceMember = await WorkspaceMember.findOne({ workspaceId, userId });
+        if (!isWorkspaceMember) return res.status(403).json({ message: "You are not a member..." });
+        
+        const userChannelMemberships = await ChannelMember.find({ workspaceId, userId }).lean();
+        const myChannelIds = userChannelMemberships.map(m => m.channelId);
+        const channels = await Channel.find({
+            workspaceId,
+            isArchived: false, 
+            $or: [{ isPrivate: false }, { _id: { $in: myChannelIds } }]
+        }).lean();
+
+        return res.status(200).json({ success: true, data: channels });
     }
-
-    const userChannelMemberships = await ChannelMember.find({ 
-        workspaceId, 
-        userId 
-    });
-    
-    const myChannelIds = userChannelMemberships.map(m => m.channelId);
-
-    const channels = await Channel.find({
-        workspaceId: workspaceId,
-        isArchived: false, 
-        $or: [
-            { isPrivate: false },
-            { _id: { $in: myChannelIds } }
-        ]
-    });
-
-    return res.status(200).json({
-        success: true,
-        data: channels
-    });
 });
 
 //List of All Members of Channel
