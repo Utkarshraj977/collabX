@@ -1,164 +1,129 @@
-import React, { createContext, useState, useRef, useContext } from 'react';
+import React, { createContext, useState, useRef, useContext, useEffect } from 'react';
 import { getSocket } from '../services/socket';
 import Peer from 'simple-peer';
 import toast from 'react-hot-toast';
 
 const VideoContext = createContext();
 
+// 🛑 POLYFILL FIX FOR VITE (Prevents simple-peer crash)
 if (typeof global === "undefined") { window.global = window; }
 
-export const VideoProvider = ({ children }) => {
+export const VideoProvider = ({ children, isSocketReady }) => {
     
     // --- STATE ---
     const [callActive, setCallActive] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
     
     const [peers, setPeers] = useState([]); 
-    const [stream, setStream] = useState(null); // Always holds Local Webcam Stream
+    const [stream, setStream] = useState(null); // Active Stream (Webcam or Screen)
     const [screenSharing, setScreenSharing] = useState(false);
     
     const [isMicOn, setIsMicOn] = useState(true);
     const [isVideoOn, setIsVideoOn] = useState(true);
 
     const myVideo = useRef();
-    const peersRef = useRef([]); 
-    const screenTrackRef = useRef(); // To store screen track
+    const peersRef = useRef([]); // Keeps track of peer connections
+    const webcamStreamRef = useRef(); // ✅ Backup for webcam stream
+    const screenTrackRef = useRef(); 
 
-    // --- JOIN ROOM LOGIC ---
-    const joinRoom = async (channelId) => {
-        const socket = getSocket();
-        if (!socket) return;
-
+    // ✅ START CAMERA (Internal Helper)
+    const startLocalStream = async () => {
         try {
+            // Always get a fresh stream when joining
             const currentStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            
             setStream(currentStream);
-            setCallActive(true);
-            setIsMinimized(false);
-
-            socket.emit("join-room", channelId);
-
-            // 1. EXISTING USERS
-            socket.off("all-users").on("all-users", (users) => {
-                const peersList = [];
-                users.forEach(userID => {
-                    const peer = createPeer(userID, socket.id, currentStream, socket);
-                    peersRef.current.push({ peerID: userID, peer });
-                    peersList.push({ peerID: userID, peer, stream: null });
-                });
-                setPeers(peersList);
-            });
-
-            // 2. NEW USER JOINED
-            socket.off("user-joined").on("user-joined", payload => {
-                const peer = addPeer(payload.signal, payload.callerID, currentStream, socket);
-                peersRef.current.push({ peerID: payload.callerID, peer });
-                setPeers(prev => [...prev, { peerID: payload.callerID, peer, stream: null }]);
-            });
-
-            // 3. SIGNAL RECEIVED
-            socket.off("receiving-returned-signal").on("receiving-returned-signal", payload => {
-                const item = peersRef.current.find(p => p.peerID === payload.id);
-                if (item) item.peer.signal(payload.signal);
-            });
-
-            // 4. USER LEFT
-            socket.off("user-left").on("user-left", id => {
-                const peerObj = peersRef.current.find(p => p.peerID === id);
-                if(peerObj) peerObj.peer.destroy();
-                const newPeers = peersRef.current.filter(p => p.peerID !== id);
-                peersRef.current = newPeers;
-                setPeers(newPeers);
-            });
-
+            webcamStreamRef.current = currentStream; // Save backup
+            
+            if (myVideo.current) myVideo.current.srcObject = currentStream;
+            return currentStream;
         } catch (error) {
             console.error("Camera Error:", error);
+            toast.error("Could not access Camera/Mic");
+            return null;
         }
     };
 
-    // --- CONTROLS ---
-    
-    const toggleAudio = () => {
-        if (stream) {
-            const track = stream.getAudioTracks()[0];
-            track.enabled = !track.enabled;
-            setIsMicOn(track.enabled);
+    // --- MAIN JOIN LOGIC ---
+    const joinRoom = async (channelId) => {
+        const socket = getSocket();
+        if (!socket || !isSocketReady) {
+            toast.error("Connecting to server...");
+            return;
         }
-    };
 
-    const toggleVideo = () => {
-        if (stream) {
-            const track = stream.getVideoTracks()[0];
-            track.enabled = !track.enabled;
-            setIsVideoOn(track.enabled);
-        }
-    };
+        const currentStream = await startLocalStream();
+        if (!currentStream) return;
 
-    // 🔥 SCREEN SHARE LOGIC (The Fix)
-    const handleScreenShare = async () => {
-        if (!screenSharing) {
-            // START SHARING
-            try {
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({ cursor: true });
-                const screenTrack = screenStream.getVideoTracks()[0];
-                screenTrackRef.current = screenTrack;
+        setCallActive(true);
+        setIsMinimized(false);
 
-                // 1. Replace Webcam Track with Screen Track for ALL peers
-                peersRef.current.forEach(({ peer }) => {
-                    // We need to replace the track currently being sent
-                    // simple-peer tracks streams, so we replace the video track inside the current stream
-                    const oldTrack = stream.getVideoTracks()[0];
-                    if (oldTrack) {
-                        peer.replaceTrack(oldTrack, screenTrack, stream);
-                    }
-                });
+        // 🧹 Cleanup listeners to prevent double-firing
+        socket.off("all-users");
+        socket.off("sending-signal"); 
+        socket.off("returning-signal");
+        socket.off("user-left");
 
-                // 2. Update Local View (Show my screen to me)
-                if (myVideo.current) {
-                    myVideo.current.srcObject = screenStream;
-                }
-                setScreenSharing(true);
+        // Step 1: Tell Server "I am here"
+        socket.emit("join-room", channelId);
 
-                // 3. Handle "Stop Sharing" from Browser UI
-                screenTrack.onended = () => stopScreenSharing();
+        // Step 2: Handle Existing Users (I Call Them)
+        socket.on("all-users", (users) => {
+            const peersList = [];
+            users.forEach(userID => {
+                // 🛑 FIX 1: CLIENT SIDE GHOST CHECK
+                if (userID === socket.id) return;
 
-            } catch (err) {
-                toast.error("something went wrong")
-            }
-        } else {
-            // STOP SHARING (Button Click)
-            stopScreenSharing();
-        }
-    };
+                // 🛑 FIX 2: DUPLICATE CHECK
+                if (peersRef.current.find(p => p.peerID === userID)) return;
 
-    const stopScreenSharing = () => {
-        const screenTrack = screenTrackRef.current;
-        if(screenTrack) screenTrack.stop(); // Stop the screen recording
-        screenTrackRef.current = null;
-
-        // 1. Replace Screen Track with Webcam Track for ALL peers
-        const webcamTrack = stream.getVideoTracks()[0];
-        peersRef.current.forEach(({ peer }) => {
-            // Important: We pass the 'screenTrack' as the old track to replace
-            peer.replaceTrack(screenTrack, webcamTrack, stream);
+                const peer = createPeer(userID, socket.id, currentStream, socket);
+                peersRef.current.push({ peerID: userID, peer });
+                peersList.push({ peerID: userID, peer, stream: null });
+            });
+            setPeers(peersList);
         });
 
-        // 2. Update Local View (Back to Webcam)
-        if (myVideo.current) {
-            myVideo.current.srcObject = stream;
-        }
-        setScreenSharing(false);
-    };
+        // Step 3: Handle Incoming Call (They Call Me)
+        socket.on("sending-signal", payload => {
+            // Check duplicate
+            if (peersRef.current.find(p => p.peerID === payload.callerID)) return;
 
-    const leaveCall = () => {
-        window.location.reload(); 
+            const peer = addPeer(payload.signal, payload.callerID, currentStream, socket);
+            peersRef.current.push({ peerID: payload.callerID, peer });
+            setPeers(prev => [...prev, { peerID: payload.callerID, peer, stream: null }]);
+        });
+
+        // Step 4: Handle Answer
+        socket.on("returning-signal", payload => {
+            const item = peersRef.current.find(p => p.peerID === payload.id);
+            if (item) {
+                item.peer.signal(payload.signal);
+            }
+        });
+
+        // Step 5: User Left
+        socket.on("user-left", id => {
+            const peerObj = peersRef.current.find(p => p.peerID === id);
+            if(peerObj) peerObj.peer.destroy();
+            const newPeers = peersRef.current.filter(p => p.peerID !== id);
+            peersRef.current = newPeers;
+            setPeers(newPeers);
+        });
     };
 
     // --- PEER HELPERS ---
+    
+    // 1. INITIATOR (Caller)
     function createPeer(userToSignal, callerID, stream, socket) {
-        const peer = new Peer({ initiator: true, trickle: false, stream });
+        const peer = new Peer({
+            initiator: true,
+            trickle: false,
+            stream,
+        });
 
         peer.on("signal", signal => {
-            if(socket) socket.emit("sending-signal", { userToSignal, callerID, signal });
+            socket.emit("sending-signal", { userToSignal, callerID, signal });
         });
 
         peer.on("stream", remoteStream => {
@@ -168,11 +133,16 @@ export const VideoProvider = ({ children }) => {
         return peer;
     }
 
+    // 2. RECEIVER (Answerer)
     function addPeer(incomingSignal, callerID, stream, socket) {
-        const peer = new Peer({ initiator: false, trickle: false, stream });
+        const peer = new Peer({
+            initiator: false,
+            trickle: false,
+            stream,
+        });
 
         peer.on("signal", signal => {
-            if(socket) socket.emit("returning-signal", { signal, callerID });
+            socket.emit("returning-signal", { signal, callerID });
         });
 
         peer.signal(incomingSignal);
@@ -195,13 +165,105 @@ export const VideoProvider = ({ children }) => {
         });
     };
 
+    // --- 🛑 ROBUST SCREEN SHARE LOGIC ---
+    const handleScreenShare = async () => {
+        // A. STOP SHARING
+        if (screenSharing) {
+            const screenTrack = screenTrackRef.current;
+            if (screenTrack) screenTrack.stop();
+            screenTrackRef.current = null;
+            setScreenSharing(false);
+
+            // Restore Webcam
+            const webcamStream = webcamStreamRef.current;
+            const webcamVideoTrack = webcamStream.getVideoTracks()[0];
+            
+            if (webcamVideoTrack) {
+                peersRef.current.forEach(({ peer }) => {
+                    // Find sender and replace track NATIVELY
+                    const sender = peer._pc.getSenders().find(s => s.track.kind === 'video');
+                    if (sender) sender.replaceTrack(webcamVideoTrack);
+                });
+            }
+
+            setStream(webcamStream);
+            if (myVideo.current) myVideo.current.srcObject = webcamStream;
+            
+        } 
+        // B. START SHARING
+        else {
+            try {
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({ cursor: true });
+                const screenTrack = screenStream.getVideoTracks()[0];
+                screenTrackRef.current = screenTrack;
+                setScreenSharing(true);
+
+                // Listen for "Stop Sharing" via browser UI
+                screenTrack.onended = () => handleScreenShare(); 
+
+                peersRef.current.forEach(({ peer }) => {
+                    // Replace Webcam Track with Screen Track NATIVELY
+                    const sender = peer._pc.getSenders().find(s => s.track.kind === 'video');
+                    if (sender) sender.replaceTrack(screenTrack);
+                });
+
+                // Update Local View
+                const newLocalStream = new MediaStream([screenTrack, ...webcamStreamRef.current.getAudioTracks()]);
+                setStream(newLocalStream);
+                if (myVideo.current) myVideo.current.srcObject = newLocalStream;
+
+            } catch (err) {
+                console.error("Screen Share Failed", err);
+            }
+        }
+    };
+
+    // --- CONTROLS ---
+    const leaveCall = () => {
+        // Stop all tracks
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        if (webcamStreamRef.current) webcamStreamRef.current.getTracks().forEach(track => track.stop());
+        
+        // Destroy peers
+        peersRef.current.forEach(p => p.peer.destroy());
+        peersRef.current = [];
+        setPeers([]);
+        setStream(null);
+        setCallActive(false);
+        
+        // Full refresh to ensure clean socket state
+        window.location.reload(); 
+    };
+
+    const toggleAudio = () => {
+        // Toggle on backup stream to persist through screen share
+        if (webcamStreamRef.current) {
+            const track = webcamStreamRef.current.getAudioTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                setIsMicOn(track.enabled);
+            }
+        }
+    };
+
+    const toggleVideo = () => {
+        // Only toggle video if NOT screen sharing
+        if (!screenSharing && webcamStreamRef.current) {
+            const track = webcamStreamRef.current.getVideoTracks()[0];
+            if (track) {
+                track.enabled = !track.enabled;
+                setIsVideoOn(track.enabled);
+            }
+        }
+    };
+
     return (
         <VideoContext.Provider value={{
             callActive, isMinimized, setIsMinimized,
             stream, peers, myVideo,
-            joinRoom, leaveCall,
+            joinRoom, leaveCall, startLocalStream,
             toggleAudio, toggleVideo, handleScreenShare,
-            isMicOn, isVideoOn, screenSharing
+            isMicOn, isVideoOn, screenSharing, isSocketReady
         }}>
             {children}
         </VideoContext.Provider>

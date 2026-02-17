@@ -137,7 +137,7 @@ const getMyProfile = async (req, res) => {
     try {
         const cachedData = await redis.get(userkey);
         if (cachedData) {
-            console.log("🔥 Redis Hit: Sending data from cache"); 
+           // console.log("🔥 Redis Hit: Sending data from cache"); 
             return res.status(200).json({ 
                 success: true, 
                 user: JSON.parse(cachedData) 

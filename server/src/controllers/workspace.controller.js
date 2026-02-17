@@ -118,14 +118,14 @@ const getUserWorkspaces = asyncHandler(async (req, res) => {
     // 1. Check Redis Cache First
     const cachedWorkspaces = await redis.get(workspaceKey);
     if (cachedWorkspaces) {
-        console.log("🚀 Serving Workspaces from Redis");
+       // console.log("🚀 Serving Workspaces from Redis");
         return res.status(200).json({
             success: true,
             data: JSON.parse(cachedWorkspaces)
         });
     }
 
-    console.log("🐌 Fetching Workspaces from MongoDB");
+    //console.log("🐌 Fetching Workspaces from MongoDB");
 
     // 2. Optimized Database Query (Single Call)
     const memberships = await WorkspaceMember.find({ userId })

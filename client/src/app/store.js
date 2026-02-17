@@ -16,3 +16,9 @@ export const store = configureStore({
 });
 
 
+const rootReducer = (state, action) => {
+  if (action.type === 'auth/logout/fulfilled') {
+    state = undefined;
+  }
+  return appReducer(state, action);
+};

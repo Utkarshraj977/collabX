@@ -2,12 +2,13 @@ import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchMessages, sendMessages, addNewMessage } from "../features/messages/messageSlice";
 import { Sparkles, Github, Paperclip, FileText, Download, Loader2 } from "lucide-react";
-import { io } from "socket.io-client";
+// ❌ DELETE: import { io } from "socket.io-client";
+// ✅ ADD THIS: Shared socket service import karein
+import { getSocket } from "../services/socket"; 
 import { triggerManualSummary } from "../services/api"; 
 import toast from "react-hot-toast";
 
-// STEP 1: Global Socket Variable
-let socket;
+// ❌ DELETE: let socket; (Global variable ki zaroorat nahi)
 
 export default function Chat({ channelId }) {
     const dispatch = useDispatch();
@@ -40,21 +41,18 @@ export default function Chat({ channelId }) {
     }, [dispatch, channelId]);
 
 
+    // ✅ SOCKET LOGIC (UPDATED)
     useEffect(() => {
-        const userToken = user?.token || user?.refreshtoken;
-        // Basic validation
-        if (!userToken || !channelId) return;
+        if (!channelId || !user?._id) return;
 
-        // A. Connection Initialize (Singleton Pattern)
-        if (!socket) {
-            socket = io(import.meta.env.VITE_MAIN_URL, { 
-                auth: { token: userToken },
-                transports: ["websocket"],
-            }); 
-        }
+        // 1. Shared Socket Instance get karein
+        const socket = getSocket(); 
 
-        // B. Room Join Logic
+        if (!socket) return; // Safety check
+
+        // 2. Room Join Logic
         const joinChannelRoom = () => {
+            // console.log(`Joining Channel: ${channelId}`);
             socket.emit("join-channel", channelId);
         };
 
@@ -64,48 +62,39 @@ export default function Chat({ channelId }) {
             socket.on("connect", joinChannelRoom);
         }
 
-        // C. Message Handler
+        // 3. Message Handler
         const handleNewMessage = (newMessage) => {
-
-            // 1. IDs ko string mein convert karein
             const msgChannelId = newMessage.channelId?.toString();
             const currentChannelId = channelId.toString();
 
             if (msgChannelId === currentChannelId) {
-
-                // 2. AI check: Agar type 'ai' hai ya senderId null hai
                 const isAI = newMessage.type === 'ai' || !newMessage.senderId;
-
-                // 3. Me check: Kya ye mera message hai?
-                // Agar senderId object hai toh ._id lo, agar string hai toh direct use karo
                 const senderIdStr = newMessage.senderId?._id?.toString() || newMessage.senderId?.toString();
                 const isNotMe = senderIdStr !== user?._id?.toString();
 
-                // ✅ Logic: Agar AI message hai OR kisi aur ka message hai, toh add karo
                 if (isAI || isNotMe) {
                     dispatch(addNewMessage(newMessage));
-
-                    // Auto Scroll
                     setTimeout(() => {
                         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
                     }, 100);
                 } 
-
-            } else {
-                console.error("❌ Message kisi aur channel ka hai.");
             }
         };
 
-        socket.off("new-message");
-
+        // Listeners Setup
         socket.on("new-message", handleNewMessage);
 
+        // Cleanup
         return () => {
             socket.off("new-message", handleNewMessage);
             socket.off("connect", joinChannelRoom);
+           
         };
 
-    }, [channelId, user?._id, dispatch]); 
+    }, [channelId, user?._id, dispatch]); // user.token hata diya dependency se
+
+    // ... Baaki code same rahega ...
+    // (handleScroll, useLayoutEffect, handleSendMessage, etc.)
 
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight } = e.target;
@@ -136,43 +125,37 @@ export default function Chat({ channelId }) {
         else if (page === 1 && messages.length > 0 && !isFetchingOld) {
             bottomRef.current?.scrollIntoView({ behavior: "auto" });
         }
-    }, [messages.length, isFetchingOld]); // dependency on messages.length is more stable
+    }, [messages.length, isFetchingOld]);
 
+    const handleSendMessage = async (e) => {
+        e.preventDefault();
+        if (!input.trim() && !selectedFile) return;
 
-    // STEP 6: Send Message Logic
-   const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!input.trim() && !selectedFile) return;
+        const commandRegex = /^\/summarize(?:\((\d+)\))?$/i;
+        const match = input.trim().match(commandRegex);
 
-    //  "/summarize" ya "/summarize(30)"
-    const commandRegex = /^\/summarize(?:\((\d+)\))?$/i;
-    const match = input.trim().match(commandRegex);
-
-    if (match) {
-        const limit = match[1] ? parseInt(match[1]) : 10;
-        setInput(""); 
-
-        try {
-            await triggerManualSummary(channelId, limit);
-        } catch (error) {
-            toast.error("something went wrong!!");
+        if (match) {
+            const limit = match[1] ? parseInt(match[1]) : 10;
+            setInput(""); 
+            try {
+                await triggerManualSummary(channelId, limit);
+            } catch (error) {
+                toast.error("something went wrong!!");
+            }
+            return; 
         }
-                return; 
-    }
 
-    const messageData = {
-        content: input,
-        channelId,
-        file: selectedFile
+        const messageData = {
+            content: input,
+            channelId,
+            file: selectedFile
+        };
+
+        await dispatch(sendMessages(messageData));
+        setInput("");
+        setSelectedFile(null);
+        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     };
-
-    await dispatch(sendMessages(messageData));
-
-    setInput("");
-    setSelectedFile(null);
-
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
-};
 
     const handleFileClick = () => fileInputRef.current.click();
     const handleFileChange = (e) => { if (e.target.files[0]) setSelectedFile(e.target.files[0]); };
@@ -183,7 +166,7 @@ export default function Chat({ channelId }) {
 
     return (
         <div className="flex flex-col h-full bg-[#121016]">
-            {/* Messages Container */}
+             {/* ... Same JSX as before ... */}
             <div
                 className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar"
                 ref={containerRef}

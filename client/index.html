@@ -9,10 +9,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CollabX</title>
   <script>
-    if (global === undefined) {
-      var global = window;
-    }
-  </script>
+      window.global = window;
+      window.process = {
+        env: { DEBUG: undefined },
+        version: '',
+        nextTick: (cb) => setTimeout(cb, 0), // Simple-peer needs this!
+      };
+    </script>
 </head>
 
 <body>

@@ -23,6 +23,7 @@ export default function ChannelPage() {
   useEffect(() => {
     if (channelId) {
       dispatch(fetchChannelById(channelId));
+
     }
   }, [dispatch, channelId]);
 
@@ -72,7 +73,7 @@ export default function ChannelPage() {
         {activeTab === "chat" && <Chat channelId={channelId} />}
         {activeTab === "tasks" && <Tasks channelId={channelId} workspaceId={workspaceId} />}
         {activeTab === "github" && <GitHub channelId={channelId} workspaceId={workspaceId} />}
-        {activeTab === "meet" && <Meet channelId={channelId} workspaceId={workspaceId}/>}
+        {activeTab === "meet" && <Meet channelId={channelId}/>}
       </div>
     </div>
   );
