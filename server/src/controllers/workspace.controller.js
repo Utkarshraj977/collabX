@@ -111,7 +111,7 @@ const createWorkspace = asyncHandler(async (req, res) => {
 });
 
 //Get All Workspace
-export const getUserWorkspaces = asyncHandler(async (req, res) => {
+const getUserWorkspaces = asyncHandler(async (req, res) => {
     const userId = req.user._id.toString();
     const workspaceKey = `user:workspaces:${userId}`;
 
