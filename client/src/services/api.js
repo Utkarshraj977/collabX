@@ -22,7 +22,7 @@ export const loadUserProfile = async () => {
 
 export const logout = async () => {
   return api.post('/users/logout');
-}
+} 
 
 //---------------WorkSpace------------------
 

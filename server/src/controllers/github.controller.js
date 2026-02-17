@@ -47,7 +47,7 @@ const addRepository = asyncHandler(async (req, res) => {
         },
         message: "Integration created"
     });
-});
+}); 
  
 const handleWebhook = asyncHandler(async (req, res) => {
     const signature = req.headers["x-hub-signature-256"];

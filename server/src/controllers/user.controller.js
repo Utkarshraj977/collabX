@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import jwt from 'jsonwebtoken';
+import redis from "../config/redis.js";
 
 // const options = {
 //     httpOnly: true,
@@ -132,18 +133,31 @@ const logout= asyncHandler(async(req,res)=>{
 })
 
 const getMyProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id).select("-passwordHash");
-    
-    const token = req.cookies?.accesstoken || req.header("Authorization")?.replace("Bearer ", "");
+    const userkey = `user:${req.user._id}`;
+    try {
+        const cachedData = await redis.get(userkey);
+        if (cachedData) {
+            return res.status(200).json({ 
+                success: true, 
+                user: JSON.parse(cachedData) 
+            });
+        }
 
-    res.status(200).json({ 
-        success: true, 
-        user: { ...user._doc, token } 
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Server Error" });
-  }
+        const user = await User.findById(req.user._id).select("-passwordHash").lean();
+        
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        await redis.setex(userkey, 86400, JSON.stringify(user));
+
+        res.status(200).json({ 
+            success: true, 
+            user 
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error" });
+    }
 };
 
 export { register, login,logout,refreshAccessToken,getMyProfile };
