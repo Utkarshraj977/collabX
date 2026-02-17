@@ -9,6 +9,6 @@ router.route("/register").post(authLimiter,upload.single("avatar"), register);
 router.route("/login").post(authLimiter,login);
 router.route("/logout").post(verifyJWT, logout);
 router.route("/refresh-token").post(refreshAccessToken);
-router.route("/getmyprofile").get(authLimiter,verifyJWT, getMyProfile);
+router.route("/getmyprofile").get(generalLimiter,verifyJWT, getMyProfile);
 
 export default router;
