@@ -57,14 +57,14 @@
 // export {createworkspace};
 
 //-------------------------------------------------------------------------------
-        //**************FOR DEVOLOPMENT *****************//
+//**************FOR DEVOLOPMENT *****************//
 //-------------------------------------------------------------------------------
 import Workspace from "../models/Workspace.js";
 import WorkspaceMember from "../models/WorkspaceMember.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import redis from "../config/redis.js";
 
-const createWorkspace = asyncHandler(async(req, res) => {
+const createWorkspace = asyncHandler(async (req, res) => {
     const { name, slug } = req.body;
 
     if (!name) {
@@ -72,8 +72,8 @@ const createWorkspace = asyncHandler(async(req, res) => {
     }
 
     // Slug Logic
-    let workspaceSlug = slug 
-        ? slug.toLowerCase() 
+    let workspaceSlug = slug
+        ? slug.toLowerCase()
         : name.toLowerCase().replace(/ /g, '-').replace(/[^\w-]+/g, '');
 
     const existingWorkspace = await Workspace.findOne({ slug: workspaceSlug });
@@ -93,9 +93,6 @@ const createWorkspace = asyncHandler(async(req, res) => {
         }
     });
 
-    // Step B: Add Owner as Admin Member (Use Object, NOT Array)
-    // If this fails, we technically have an orphaned workspace, 
-    // but for local dev, this is acceptable risk.
     await WorkspaceMember.create({
         workspaceId: newWorkspace._id,
         userId: req.user._id,
@@ -104,48 +101,66 @@ const createWorkspace = asyncHandler(async(req, res) => {
         status: 'active'
     });
 
-    // --- REMOVED COMMIT TRANSACTION ---
-
+    // Jab bhi workspace create ya join ho:
+    await redis.del(`user:workspaces:${req.user._id}`);
     return res.status(201).json({
         success: true,
         message: "Workspace created successfully",
         data: newWorkspace
     });
 });
- 
+
 //Get All Workspace
-const getUserWorkspaces = asyncHandler(async (req, res) => {
-    
-    const createdMemberships = await WorkspaceMember.find({ 
-        userId: req.user._id, 
-        joinedVia: "create" 
-    })
-    .populate("workspaceId")
-    .lean(); 
+export const getUserWorkspaces = asyncHandler(async (req, res) => {
+    const userId = req.user._id.toString();
+    const workspaceKey = `user:workspaces:${userId}`;
 
-    const joinedMemberships = await WorkspaceMember.find({ 
-        userId: req.user._id, 
-        joinedVia: "invite" 
-    })
-    .populate("workspaceId")
-    .lean(); 
+    // 1. Check Redis Cache First
+    const cachedWorkspaces = await redis.get(workspaceKey);
+    if (cachedWorkspaces) {
+        console.log("🚀 Serving Workspaces from Redis");
+        return res.status(200).json({
+            success: true,
+            data: JSON.parse(cachedWorkspaces)
+        });
+    }
 
-    const createdWorkspaces = createdMemberships.map(m => ({
-        ...m.workspaceId, 
-        myRole: "admin"
-    }));
+    console.log("🐌 Fetching Workspaces from MongoDB");
 
-    const joinedWorkspaces = joinedMemberships.map(m => ({
-        ...m.workspaceId,
-        myRole: m.role
-    }));
+    // 2. Optimized Database Query (Single Call)
+    const memberships = await WorkspaceMember.find({ userId })
+        .populate("workspaceId")
+        .lean();
 
-    return res.status(200).json({ 
-        success: true, 
-        data: {
-            created: createdWorkspaces,
-            joined: joinedWorkspaces
+    const createdWorkspaces = [];
+    const joinedWorkspaces = [];
+
+    // 3. Process data in one loop
+    memberships.forEach(m => {
+        if (!m.workspaceId) return;
+
+        const workspaceData = {
+            ...m.workspaceId,
+            myRole: m.joinedVia === "create" ? "admin" : m.role
+        };
+
+        if (m.joinedVia === "create") {
+            createdWorkspaces.push(workspaceData);
+        } else {
+            joinedWorkspaces.push(workspaceData);
         }
+    });
+
+    const responseData = {
+        created: createdWorkspaces,
+        joined: joinedWorkspaces
+    };
+
+    await redis.setex(workspaceKey, 3600, JSON.stringify(responseData));
+
+    return res.status(200).json({
+        success: true,
+        data: responseData
     });
 });
 
@@ -168,42 +183,42 @@ const GetWorkspaceById = asyncHandler(async (req, res) => {
 });
 
 //GetOnlineUsers
-const getonlineusers=asyncHandler(async(req,res)=>{
-    const {workspaceId}=req.params;
+const getonlineusers = asyncHandler(async (req, res) => {
+    const { workspaceId } = req.params;
 
-    const onlineuserid= await redis.smembers(`workspace:${workspaceId}:online`);
-    if(onlineuserid.length==0){
-        return res.status(404).json({message:"data not found"})
+    const onlineuserid = await redis.smembers(`workspace:${workspaceId}:online`);
+    if (onlineuserid.length == 0) {
+        return res.status(404).json({ message: "data not found" })
     }
 
-        const pipeline = redis.pipeline();
-        
-        onlineuserid.forEach((id) => {
-            pipeline.hgetall(`user:session:${id}`);
-        });
+    const pipeline = redis.pipeline();
 
-        const results = await pipeline.exec();
+    onlineuserid.forEach((id) => {
+        pipeline.hgetall(`user:session:${id}`);
+    });
 
-        const onlineUsers = results
-            .map(([err, user], index) => {
-                if (user && Object.keys(user).length > 0) {
-                     return { _id: onlineuserid[index], ...user };
-                }
-                return null;
-            })
-            .filter(user => user !== null);
+    const results = await pipeline.exec();
 
-        return res.status(200).json({
-            success: true,
-            data: onlineUsers
-        });
+    const onlineUsers = results
+        .map(([err, user], index) => {
+            if (user && Object.keys(user).length > 0) {
+                return { _id: onlineuserid[index], ...user };
+            }
+            return null;
+        })
+        .filter(user => user !== null);
+
+    return res.status(200).json({
+        success: true,
+        data: onlineUsers
+    });
 })
 
 const getWorkspaceMembers = asyncHandler(async (req, res) => {
     const { workspaceId } = req.params;
     const currentUserId = req.user._id;
-    const members = await WorkspaceMember.find({ workspaceId,userId: { $ne: currentUserId } })
-        .populate('userId', 'name email avatarUrl'); 
+    const members = await WorkspaceMember.find({ workspaceId, userId: { $ne: currentUserId } })
+        .populate('userId', 'name email avatarUrl');
 
     if (!members) {
         return res.status(404).json({ message: "No members found" });
@@ -214,7 +229,7 @@ const getWorkspaceMembers = asyncHandler(async (req, res) => {
         name: member.userId.name,
         email: member.userId.email,
         avatarUrl: member.userId.avatarUrl,
-        role: member.role, 
+        role: member.role,
         joinedAt: member.createdAt
     }));
 
@@ -224,4 +239,4 @@ const getWorkspaceMembers = asyncHandler(async (req, res) => {
     });
 });
 
-export { createWorkspace,getWorkspaceMembers,getUserWorkspaces,getonlineusers,GetWorkspaceById };
+export { createWorkspace, getWorkspaceMembers, getUserWorkspaces, getonlineusers, GetWorkspaceById };

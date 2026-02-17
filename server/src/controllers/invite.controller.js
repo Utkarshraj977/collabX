@@ -3,6 +3,7 @@ import WorkspaceInvite from "../models/WorkspaceInvite.js";
 import WorkspaceMember from "../models/WorkspaceMember.js";
 import Workspace from "../models/Workspace.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import redis from "../config/redis.js";
 
 const createInviteLink = asyncHandler(async(req, res) => {
     const { workspaceId } = req.params;
@@ -59,7 +60,6 @@ const joinWorkspaceByInvite = asyncHandler(async(req, res) => {
     if (existingMember) {
         return res.status(409).json({ message: "You are already a member of this workspace" });
     }
-
     const newMember = await WorkspaceMember.create({
         workspaceId: invite.workspaceId,
         userId,
@@ -67,7 +67,8 @@ const joinWorkspaceByInvite = asyncHandler(async(req, res) => {
         joinedVia: 'invite',
         invitedBy: invite.inviterId
     });
-
+    
+    await redis.del(`user:workspaces:${req.user._id}`);
     return res.status(200).json({
         success: true,
         message: "Successfully joined workspace",
