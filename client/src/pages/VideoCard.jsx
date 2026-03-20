@@ -18,7 +18,7 @@ const VideoCard = ({ stream, isLocal }) => {
                     console.error("Auto-Play Failed:", e);
                 }
             };
-        }
+        }  
     }, [stream]);
 
     return (
@@ -41,7 +41,7 @@ const VideoCard = ({ stream, isLocal }) => {
             )}
             
             <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg text-xs font-semibold text-white border border-white/10">
-                {isLocal ? "You" : "Remote User"}
+                {isLocal ? "You" : ""}
             </div>
         </div>
     );

@@ -5,8 +5,8 @@ import AppRoutes from "./routes/AppRoutes";
 import { Toaster } from 'react-hot-toast';
 import { connectSocket, disconnectSocket } from "./services/socket"; // Import fix
 
-import { VideoProvider } from "./components/VideoContext";
-import CallOverlay from "./components/CallOverlay";
+import { VideoProvider } from "./components/VideoContext1";
+import CallOverlay1 from "./components/CallOverlay1";
 
 export default function App() {
   const [isSocketReady, setIsSocketReady] = useState(false);
@@ -96,7 +96,7 @@ export default function App() {
           </div>
           
           <VideoProvider isSocketReady={isSocketReady}>
-            <CallOverlay />
+            <CallOverlay1 />
             <AppRoutes />
           </VideoProvider>
         </>

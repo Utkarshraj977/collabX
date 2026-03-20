@@ -6,10 +6,10 @@ const app = express();
 app.set('trust proxy', 1);
 
 app.use(cors({
-   origin: process.env.CORS_ORIGIN,
+    origin: process.env.CORS_ORIGIN,
     credentials: true, 
     methods: ["GET", "POST", "PUT","PATCH", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization", "ngrok-skip-browser-warning"] // 👈 Is header ko allow karo
+    allowedHeaders: ["Content-Type", "Authorization", "ngrok-skip-browser-warning"] 
 }));
 
 app.use(express.json({
@@ -45,3 +45,4 @@ app.get("/", (req, res) => {
 }); 
 
 export default app;
+

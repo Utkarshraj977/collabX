@@ -13,7 +13,7 @@ export const VideoProvider = ({ children, isSocketReady }) => {
     // --- STATE ---
     const [callActive, setCallActive] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
-    
+     
     const [peers, setPeers] = useState([]); 
     const [stream, setStream] = useState(null); // Active Stream (Webcam or Screen)
     const [screenSharing, setScreenSharing] = useState(false);

@@ -14,7 +14,7 @@ const CallOverlay = () => {
         leaveCall, toggleAudio, toggleVideo, handleScreenShare,
         isMicOn, isVideoOn, screenSharing 
     } = useVideo();
-
+ 
     // Agar call active nahi hai to kuch mat dikhao
     if (!callActive) return null;
 

@@ -1,25 +1,41 @@
 import { useParams } from "react-router-dom";
-import { useState,useEffect } from "react";
+import { useState, useEffect } from "react";
 import { MessageSquare, ListTodo, Video, GitBranch } from "lucide-react";
 import Chat from "./Chat";
 import Tasks from "./Tasks";
 import GitHub from "./GitHub";
-import Meet from "./Meet";
+import Meet1 from "./Meet1";
 import { fetchChannelById } from "../features/workspace/workspaceSlice";
-import { useDispatch,useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import toast from 'react-hot-toast';
+import { getSocket } from '../services/socket';
 
 export default function ChannelPage() {
-  const { channelId,workspaceId } = useParams();
+  const { channelId, workspaceId } = useParams();
   const [activeTab, setActiveTab] = useState("chat");
-  const dispatch=useDispatch();
-
+  const [isMeetingLive, setIsMeetingLive] = useState(false);
+  const dispatch = useDispatch();
+  const socket=getSocket();
+  
   const tabs = [
     { id: "chat", label: "Chat", icon: MessageSquare },
     { id: "tasks", label: "Tasks", icon: ListTodo },
     { id: "github", label: "GitHub", icon: GitBranch },
     { id: "meet", label: "Meet", icon: Video },
   ];
-   
+
+  useEffect(() => {
+    socket.on("meeting-is-live", (data) => {
+      if (data.channelId === channelId) {
+        setIsMeetingLive(true);
+        toast.success(data.message, { duration: 5000 });
+      }
+    });
+
+    return () => {
+      socket.off("meeting-is-live");
+    }
+  }, [channelId]);
   useEffect(() => {
     if (channelId) {
       dispatch(fetchChannelById(channelId));
@@ -27,8 +43,8 @@ export default function ChannelPage() {
     }
   }, [dispatch, channelId]);
 
-  const currentChannel = useSelector((state)=>state.workspace);
-  const cc=currentChannel.currentChannel;
+  const currentChannel = useSelector((state) => state.workspace);
+  const cc = currentChannel.currentChannel;
   return (
     <div className="flex flex-col h-full bg-[#15171c] text-white">
       <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 bg-surface/50 backdrop-blur-sm sticky top-0 z-10">
@@ -49,11 +65,10 @@ export default function ChannelPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${
-                  activeTab === tab.id
-                    ? "bg-gray-700 text-white shadow-lg"
-                    : "text-gray-500 hover:bg-gray-800 hover:text-gray-300"
-                }`}
+                className={`px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-2 transition-all ${activeTab === tab.id
+                  ? "bg-gray-700 text-white shadow-lg"
+                  : "text-gray-500 hover:bg-gray-800 hover:text-gray-300"
+                  }`}
               >
                 <Icon size={16} />
                 {tab.label}
@@ -73,8 +88,9 @@ export default function ChannelPage() {
         {activeTab === "chat" && <Chat channelId={channelId} />}
         {activeTab === "tasks" && <Tasks channelId={channelId} workspaceId={workspaceId} />}
         {activeTab === "github" && <GitHub channelId={channelId} workspaceId={workspaceId} />}
-        {activeTab === "meet" && <Meet channelId={channelId}/>}
+        {activeTab === "meet" && <Meet1 channelId={channelId} />}
       </div>
+    
     </div>
   );
 }

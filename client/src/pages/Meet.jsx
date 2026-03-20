@@ -8,7 +8,7 @@ export default function Meet({ channelId }) { // isSocketReady hata diya kyunki 
     // ✅ Context se sab kuch access karein
     const { 
         joinRoom, 
-        callActive, 
+        callActive,  
         startLocalStream, 
         stream, // Use global stream instead of local state
         isSocketReady 

@@ -9,14 +9,12 @@ import redis from './config/redis.js';
 let io;
 
 const initializeSocket = (httpServer) => {
-    // 1. Redis connection for Scaling
     const pubClient = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
     const subClient = pubClient.duplicate();
 
-    // 2. Setup IO
     io = new Server(httpServer, {
         cors: {
-            origin: process.env.FRONTEND_URL, // Ensure this matches your Vite URL exactly
+            origin: process.env.FRONTEND_URL, 
             methods: ["GET", "POST"],
             credentials: true
         }
@@ -24,7 +22,6 @@ const initializeSocket = (httpServer) => {
 
     io.adapter(createAdapter(pubClient, subClient));
 
-    // 3. Authentication Middleware
     io.use(async (socket, next) => {
         try {
             const token = socket.handshake.auth.token ||
@@ -50,8 +47,7 @@ const initializeSocket = (httpServer) => {
 
     io.on("connection", async (socket) => {
         const userId = socket.user._id.toString();
-        
-        // --- CHAT LOGIC ---
+
         socket.on("join-channel", (channelId) => {
             socket.join(channelId.toString());
         });
@@ -60,51 +56,56 @@ const initializeSocket = (httpServer) => {
             socket.to(channelId).emit("typing", socket.user.name);
         });
 
-        // --- VIDEO MEET LOGIC (Fixed Signaling) ---
-
-        // 1. Join Video Room & Get Existing Users
         socket.on("join-room", (roomId) => {
             socket.join(roomId);
-
-            // Get all socket IDs in this room
             const clients = io.sockets.adapter.rooms.get(roomId);
-            
-            // 🛑 FIX: Filter out SELF (Server-side ghost prevention)
             const users = clients ? Array.from(clients).filter(id => id !== socket.id) : [];
-
-            // Send list of EXISTING users to the NEW person
             socket.emit("all-users", users);
-
-           // console.log(`📹 ${socket.user.name} joined room ${roomId}. Remote Users: ${users.length}`);
         });
 
-        // 2. Relay Offer (New User -> Existing User)
-        socket.on("sending-signal", payload => {
-            // Payload: { userToSignal, callerID, signal }
-            io.to(payload.userToSignal).emit('sending-signal', {
-                signal: payload.signal,
-                callerID: payload.callerID
+        socket.on("call-user", (data) => {
+            io.to(data.targetId).emit("incoming-call", {
+                callerId: socket.id, 
+                offer: data.offer
             });
         });
 
-        // 3. Relay Answer (Existing User -> New User)
-        socket.on("returning-signal", payload => {
-            // Payload: { signal, callerID }
-            io.to(payload.callerID).emit('returning-signal', {
-                signal: payload.signal,
-                id: socket.id
+        socket.on("call-accepted", (data) => {
+            io.to(data.targetId).emit("call-answered", {
+                answererId: socket.id, 
+                answer: data.answer
+            });
+        });
+
+        // 4. Relay ICE Candidates (The Network Paths - Fixes the Black Screen!)
+        socket.on("ice-candidate", (data) => {
+            io.to(data.targetId).emit("incoming-ice-candidate", {
+                senderId: socket.id,
+                candidate: data.candidate
+            });
+        });
+
+        // --- END OF VIDEO MEET LOGIC ---
+
+        // Inside your io.on("connection") block:
+
+        socket.on("notify-meeting-started", ({ channelId, userName }) => {
+            // socket.to() sends it to everyone in that channel EXCEPT the sender
+            socket.to(channelId).emit("meeting-is-live", {
+                message: `${userName} started a video meeting!`,
+                channelId: channelId
             });
         });
 
         // --- DISCONNECT & CLEANUP ---
-        
+
         // 🛑 FIX: Handle room leaving explicitly
         socket.on("disconnecting", () => {
-             const rooms = [...socket.rooms];
-             rooms.forEach((roomId) => {
-                 socket.leave(roomId);
-                 socket.to(roomId).emit("user-left", socket.id);
-             });
+            const rooms = [...socket.rooms];
+            rooms.forEach((roomId) => {
+                socket.leave(roomId);
+                socket.to(roomId).emit("user-left", socket.id);
+            });
         });
 
         socket.on("disconnect", async () => {
