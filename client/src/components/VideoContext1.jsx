@@ -242,10 +242,24 @@ import React, { createContext, useState, useRef, useContext } from 'react';
 const VideoContext = createContext();
 
 // 1. Google's Free STUN Servers
+
 const peerConfiguration = {
     iceServers: [
+        // 1. STUN Servers (Public IP ढूँढने के लिए)
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        
+        // 2. TURN Servers (फायरवॉल बायपास करके वीडियो भेजने के लिए - VERY IMPORTANT FOR PRODUCTION)
+        {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject"
+        },
+        {
+            urls: "turn:openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayproject"
+        }
     ]
 };
 
@@ -426,6 +440,11 @@ export const VideoProvider = ({ children, isSocketReady }) => {
 
         setCallActive(true);
         socket.emit("join-room", channelId);
+
+        socket.off("all-users");
+        socket.off("incoming-call");
+        socket.off("call-answered");
+        socket.off("incoming-ice-candidate");
 
         socket.on("all-users", (existingUsers) => {
             existingUsers.forEach(async (targetSocketId) => {
