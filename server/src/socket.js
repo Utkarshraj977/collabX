@@ -77,6 +77,12 @@ const initializeSocket = (httpServer) => {
             });
         });
 
+        socket.on("leave-room", (roomId) => {
+            socket.leave(roomId); // यूज़र को रूम से बाहर निकालो
+            // रूम में बचे हुए बाकी लोगों को बता दो कि यह यूज़र चला गया
+            socket.to(roomId).emit("user-left", socket.id); 
+        });
+        
         // 4. Relay ICE Candidates (The Network Paths - Fixes the Black Screen!)
         socket.on("ice-candidate", (data) => {
             io.to(data.targetId).emit("incoming-ice-candidate", {
