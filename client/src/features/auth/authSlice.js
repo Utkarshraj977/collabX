@@ -11,12 +11,12 @@ export const loadUser = createAsyncThunk(
       return rejectWithValue(error.response?.data?.message || "Session Expired");
     }
   }
-); 
+);   
 
 export const logoutUser = createAsyncThunk(
   "auth/logout",
   async (_, { rejectWithValue }) => {
-    try {
+    try { 
       await logout();
       return;
     } catch (error) {

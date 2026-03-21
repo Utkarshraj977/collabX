@@ -14,14 +14,18 @@ const initializeSocket = (httpServer) => {
 
     io = new Server(httpServer, {
         cors: {
-            origin: process.env.FRONTEND_URL, 
+            origin: process.env.FRONTEND_URL,
             methods: ["GET", "POST"],
             credentials: true
-        }
+        },
+        // ✅ FIX: Render kills idle connections — these settings keep WS alive
+        pingTimeout: 60000,   // wait 60s before declaring connection dead
+        pingInterval: 25000,  // send a ping every 25s automatically
     });
 
     io.adapter(createAdapter(pubClient, subClient));
 
+    // ─── AUTH MIDDLEWARE (unchanged) ─────────────────────────────────
     io.use(async (socket, next) => {
         try {
             const token = socket.handshake.auth.token ||
@@ -45,9 +49,11 @@ const initializeSocket = (httpServer) => {
         }
     });
 
+    // ─── CONNECTION ───────────────────────────────────────────────────
     io.on("connection", async (socket) => {
         const userId = socket.user._id.toString();
 
+        // ── Channel / Chat ────────────────────────────────────────────
         socket.on("join-channel", (channelId) => {
             socket.join(channelId.toString());
         });
@@ -56,34 +62,46 @@ const initializeSocket = (httpServer) => {
             socket.to(channelId).emit("typing", socket.user.name);
         });
 
-        socket.on("join-room", (roomId) => {
-            socket.join(roomId);
-            const clients = io.sockets.adapter.rooms.get(roomId);
-            const users = clients ? Array.from(clients).filter(id => id !== socket.id) : [];
-            socket.emit("all-users", users);
+        // ── Heartbeat (manual ping from frontend as extra safety) ─────
+        // Socket.io already sends its own pings via pingInterval above,
+        // but we keep this for the manual heartbeat in VideoContext.
+        socket.on('ping', () => {
+            socket.emit('pong');
         });
 
+        // ── VIDEO MEET: Join Room ─────────────────────────────────────
+        socket.on("join-room", (roomId) => {
+            socket.join(roomId);
+
+            // ✅ Track which video room this socket is in
+            // so disconnecting handler can clean up correctly
+            socket.currentVideoRoom = roomId;
+
+            // Send list of existing users (everyone except the joiner)
+            const clients = io.sockets.adapter.rooms.get(roomId);
+            const existingUsers = clients
+                ? Array.from(clients).filter(id => id !== socket.id)
+                : [];
+
+            socket.emit("all-users", existingUsers);
+        });
+
+        // ── VIDEO MEET: WebRTC Signaling ──────────────────────────────
         socket.on("call-user", (data) => {
             io.to(data.targetId).emit("incoming-call", {
-                callerId: socket.id, 
+                callerId: socket.id,
                 offer: data.offer
             });
         });
 
         socket.on("call-accepted", (data) => {
             io.to(data.targetId).emit("call-answered", {
-                answererId: socket.id, 
+                answererId: socket.id,
                 answer: data.answer
             });
         });
 
-        socket.on("leave-room", (roomId) => {
-            socket.leave(roomId); // यूज़र को रूम से बाहर निकालो
-            // रूम में बचे हुए बाकी लोगों को बता दो कि यह यूज़र चला गया
-            socket.to(roomId).emit("user-left", socket.id); 
-        });
-        
-        // 4. Relay ICE Candidates (The Network Paths - Fixes the Black Screen!)
+        // ── VIDEO MEET: ICE Candidates ────────────────────────────────
         socket.on("ice-candidate", (data) => {
             io.to(data.targetId).emit("incoming-ice-candidate", {
                 senderId: socket.id,
@@ -91,41 +109,49 @@ const initializeSocket = (httpServer) => {
             });
         });
 
-        // --- END OF VIDEO MEET LOGIC ---
+        // ── VIDEO MEET: Leave Room (intentional) ─────────────────────
+        socket.on("leave-room", (roomId) => {
+            socket.to(roomId).emit("user-left", socket.id);
+            socket.leave(roomId);
+            socket.currentVideoRoom = null; // ✅ clear the tracked room
+        });
 
-        // Inside your io.on("connection") block:
-
+        // ── VIDEO MEET: Meeting notification ─────────────────────────
         socket.on("notify-meeting-started", ({ channelId, userName }) => {
-            // socket.to() sends it to everyone in that channel EXCEPT the sender
             socket.to(channelId).emit("meeting-is-live", {
                 message: `${userName} started a video meeting!`,
                 channelId: channelId
             });
         });
 
-        // --- DISCONNECT & CLEANUP ---
-
-        // 🛑 FIX: Handle room leaving explicitly
+        // ── DISCONNECT: Tab close / network drop ─────────────────────
+        // "disconnecting" fires BEFORE the socket leaves its rooms,
+        // so socket.rooms still has the room IDs at this point.
+        // ✅ FIX: Only emit user-left for VIDEO rooms, not every channel room.
+        //         We use socket.currentVideoRoom to target the right room.
         socket.on("disconnecting", () => {
-            const rooms = [...socket.rooms];
-            rooms.forEach((roomId) => {
-                socket.leave(roomId);
-                socket.to(roomId).emit("user-left", socket.id);
-            });
+            if (socket.currentVideoRoom) {
+                socket.to(socket.currentVideoRoom).emit("user-left", socket.id);
+            }
         });
 
+        // "disconnect" fires AFTER the socket has left all rooms.
         socket.on("disconnect", async () => {
             // Redis Status Update (Offline)
-            await redis.hset(`user:session:${userId}`, "status", "offline");
-            if (socket.workspaceIds) {
-                for (const id of socket.workspaceIds) {
-                    await redis.srem(`workspace:${id}:online`, userId);
+            try {
+                await redis.hset(`user:session:${userId}`, "status", "offline");
+                if (socket.workspaceIds) {
+                    for (const id of socket.workspaceIds) {
+                        await redis.srem(`workspace:${id}:online`, userId);
+                    }
                 }
+                io.emit("user-status", { userId, status: "offline" });
+            } catch (err) {
+                console.error("❌ Disconnect cleanup error:", err.message);
             }
-            io.emit("user-status", { userId, status: "offline" });
         });
 
-        // --- ONLINE STATUS INIT ---
+        // ── ONLINE STATUS INIT ────────────────────────────────────────
         try {
             await redis.hset(`user:session:${userId}`, {
                 name: socket.user.name,
@@ -150,7 +176,7 @@ const initializeSocket = (httpServer) => {
     });
 
     return io;
-}
+};
 
 const getIO = () => {
     if (!io) throw new Error("Socket.io not initialized!");

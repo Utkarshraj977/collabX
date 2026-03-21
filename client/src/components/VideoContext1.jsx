@@ -1,382 +1,114 @@
-// import React, { createContext, useState, useRef, useContext } from 'react';
-
-// const VideoContext = createContext();
-// // 1. Google के Free STUN Servers (ताकि इंटरनेट पर डिवाइस एक-दूसरे को ढूँढ सकें)
-// const peerConfiguration = {
-//     iceServers: [
-//         { urls: 'stun:stun.l.google.com:19302' },
-//         { urls: 'stun:stun1.l.google.com:19302' }
-//     ]
-// };
-
-// export const VideoProvider = ({ children, isSocketReady }) => {
-//     // --- UI STATES ---
-//     const [callActive, setCallActive] = useState(false);
-//     const [isMinimized, setIsMinimized] = useState(false);
-    
-//     // --- MEDIA STATES ---
-//     const [stream, setStream] = useState(null); // What the world sees (Camera or Screen)
-//     const [isMicOn, setIsMicOn] = useState(true);
-//     const [isVideoOn, setIsVideoOn] = useState(true);
-
-//     // --- REFS (Variables that don't trigger re-renders) ---
-//     // We keep a backup of the original webcam stream in case you switch to screen-share and want to switch back
-//     const webcamStreamRef = useRef(null); 
-    
-//     // This will hold all our Native WebRTC connections later: [{ peerId: '123', pc: RTCPeerConnection }]
-//     const peersRef = useRef([]); 
-
-//     /**
-//      * FEATURE 1: Get Camera & Mic Permissions
-//      * Why? We need to call this when the user clicks the "Meet" tab to show the preview.
-//      */
-//     const startLocalStream = async () => {
-//         try {
-//             // Ask the browser for native media devices
-//             const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-//                 video: true, 
-//                 audio: true 
-//             });
-            
-//             setStream(mediaStream);
-//             webcamStreamRef.current = mediaStream; // Save to backup
-            
-//             return mediaStream;
-//         } catch (error) {
-//             console.error("Camera Error:", error);
-//             // Hint: Usually fails if the site isn't HTTPS or user denies permission
-//             return null; 
-//         }
-//     };
-
-//     /**
-//      * FEATURE 2: Toggle Audio natively
-//      * Why? We don't stop the stream; we just "mute" the audio track.
-//      */
-//     const toggleAudio = () => {
-//         if (webcamStreamRef.current) {
-//             // Get the first audio track (your mic)
-//             const audioTrack = webcamStreamRef.current.getAudioTracks()[0];
-//             if (audioTrack) {
-//                 audioTrack.enabled = !audioTrack.enabled; // Toggle true/false
-//                 setIsMicOn(audioTrack.enabled); // Update UI
-//             }
-//         }
-//     };
-
-//     /**
-//      * FEATURE 3: Toggle Video natively
-//      */
-//     const toggleVideo = () => {
-//         if (webcamStreamRef.current) {
-//              // Get the first video track (your camera)
-//             const videoTrack = webcamStreamRef.current.getVideoTracks()[0];
-//             if (videoTrack) {
-//                 videoTrack.enabled = !videoTrack.enabled;
-//                 setIsVideoOn(videoTrack.enabled);
-//             }
-//         }
-//     };
-
-//     // --- NEW STATE: दूसरों की वीडियो स्टोर करने के लिए ---
-//     // इसमें हम ऐसा डेटा रखेंगे: [{ peerId: "socketId1", stream: MediaStream }]
-//     const [peers, setPeers] = useState([]); 
-
-//     /**
-//      * NATIVE WEBRTC: एक नया कनेक्शन (पाइप) बनाने का फंक्शन
-//      * यह फंक्शन हर नए यूज़र के लिए एक नया पाइप बनाएगा।
-//      */
-//     const createPeerConnection = (targetSocketId, myStream) => {
-        
-//         // 1. खाली पाइप (Connection) तैयार करो
-//         const pc = new RTCPeerConnection(peerConfiguration);
-
-//         // 2. अपना वीडियो/ऑडियो इस पाइप में डालो (ताकि सामने वाले को दिखे)
-//         if (myStream) {
-//             myStream.getTracks().forEach(track => {
-//                 pc.addTrack(track, myStream);
-//             });
-//         }
-
-//         // 3. जब सामने वाला अपना वीडियो पाइप में डाले, तो उसे रिसीव करो
-//         pc.ontrack = (event) => {
-//             console.log("Remote Video Received from:", targetSocketId);
-//             const remoteStream = event.streams[0];
-            
-//             // इस नई वीडियो को अपनी React State (peers) में सेव कर लो ताकि UI पर दिखे
-//             setPeers(prevPeers => {
-//                 // चेक करो कि क्या यह यूज़र पहले से लिस्ट में है? 
-//                 const existingPeer = prevPeers.find(p => p.peerId === targetSocketId);
-//                 if (existingPeer) {
-//                     return prevPeers.map(p => 
-//                         p.peerId === targetSocketId ? { ...p, stream: remoteStream } : p
-//                     );
-//                 } else {
-//                     return [...prevPeers, { peerId: targetSocketId, pc: pc, stream: remoteStream }];
-//                 }
-//             });
-//         };
-
-//         // 4. जब ब्राउज़र इंटरनेट पर रास्ता (ICE Candidate) ढूँढ ले, तो उसे Socket के जरिये भेजो
-//        pc.onicecandidate = (event) => {
-//             if (event.candidate) {
-//                 // SEND YOUR PUBLIC IP TO THE OTHER GUY
-//                 socket.emit("ice-candidate", { 
-//                     targetId: targetSocketId, 
-//                     candidate: event.candidate 
-//                 });
-//             }
-//         };
-
-//         // अंत में इस तैयार पाइप को वापस कर दो 
-//         return pc;
-//     };
-
-//     /**
-//      * FEATURE 4: THE HANDSHAKE (Signaling)
-//      * This function runs when you click the "Join Now" button.
-//      */
-//     const joinRoom = async (channelId, socket) => {
-        
-//         // 1. First, make sure our camera is running!
-//         const myStream = await startLocalStream();
-//         if (!myStream) {
-//             alert("Camera needed to join!");
-//             return; 
-//         }
-
-//         setCallActive(true);
-
-//         // 2. Tell the Node.js server: "Put me in this channel's meeting room"
-//         socket.emit("join-room", channelId);
-
-//         // ==========================================
-//         // SCENARIO A: YOU are the new guy joining.
-//         // Server sends you a list of people already in the room.
-//         // ==========================================
-//         socket.on("all-users", (existingUsers) => {
-//             existingUsers.forEach(async (targetSocketId) => {
-                
-//                 // 1. Create a pipe for this specific user
-//                 const pc = createPeerConnection(targetSocketId, myStream, socket);
-//                 peersRef.current.push({ peerId: targetSocketId, pc });
-
-//                 // 2. Create an "Offer" (Hey, I support 720p video, wanna connect?)
-//                 const offer = await pc.createOffer();
-//                 await pc.setLocalDescription(offer); // Save it to our own pipe
-
-//                 // 3. Send the Offer to that specific user via Socket.io
-//                 socket.emit("call-user", { targetId: targetSocketId, offer });
-//             });
-//         });
-
-//         // ==========================================
-//         // SCENARIO B: You are ALREADY in the room, and someone calls YOU.
-//         // ==========================================
-//         socket.on("incoming-call", async ({ callerId, offer }) => {
-            
-//             // 1. Create a pipe for the new guy calling you
-//             const pc = createPeerConnection(callerId, myStream, socket);
-//             peersRef.current.push({ peerId: callerId, pc });
-
-//             // 2. Accept their Offer
-//             await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-//             // 3. Create an "Answer" (Yes, I accept, here is my video format)
-//             const answer = await pc.createAnswer();
-//             await pc.setLocalDescription(answer);
-
-//             // 4. Send the Answer back to the caller
-//             socket.emit("call-accepted", { targetId: callerId, answer });
-//         });
-
-//         // ==========================================
-//         // SCENARIO C: The guy you called answered your call!
-//         // ==========================================
-//         socket.on("call-answered", async ({ answererId, answer }) => {
-//             // Find the pipe we created for them earlier
-//             const peerObj = peersRef.current.find(p => p.peerId === answererId);
-//             if (peerObj) {
-//                 // Save their Answer. The Handshake is now complete!
-//                 await peerObj.pc.setRemoteDescription(new RTCSessionDescription(answer));
-//             }
-//         });
-
-//         // ==========================================
-//         // THE FINAL PIECE: Receiving the Network Path (ICE Candidate)
-//         // ==========================================
-//         socket.on("incoming-ice-candidate", async ({ senderId, candidate }) => {
-//             const peerObj = peersRef.current.find(p => p.peerId === senderId);
-//             if (peerObj && peerObj.pc.remoteDescription) {
-//                 // Add their public IP/Route to our pipe so video can start flowing!
-//                 await peerObj.pc.addIceCandidate(new RTCIceCandidate(candidate));
-//             }
-//         });
-//     };
-
-//     // We pass all these tools down to your UI components
-//     return (
-//         <VideoContext.Provider value={{
-//             callActive, setCallActive,
-//             isMinimized, setIsMinimized,
-//             stream, 
-//             startLocalStream, toggleAudio, toggleVideo,
-//             isMicOn, isVideoOn, isSocketReady
-//         }}>
-//             {children}
-//         </VideoContext.Provider>
-//     );
-// };
-
-// export const useVideo = () => useContext(VideoContext);
-
-
-
-
-
-
-
-
-import React, { createContext, useState, useRef, useContext } from 'react';
+import React, { createContext, useState, useRef, useContext, useCallback } from 'react';
 
 const VideoContext = createContext();
 
-// 1. Google's Free STUN Servers
+// ✅ PRODUCTION: Fetch real TURN credentials from Metered.ca
+const METERED_API_KEY = "ef0b486c91d855c7b088abb42f4fcc9b62ee";
+const METERED_API_URL = `https://collabx.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`;
 
-const peerConfiguration = {
+// Fallback STUN-only config (used if API fetch fails)
+const FALLBACK_CONFIG = {
     iceServers: [
-        // 1. STUN Servers (Public IP ढूँढने के लिए)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        
-        // 2. TURN Servers (फायरवॉल बायपास करके वीडियो भेजने के लिए - VERY IMPORTANT FOR PRODUCTION)
-        {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject"
-        },
-        {
-            urls: "turn:openrelay.metered.ca:443",
-            username: "openrelayproject",
-            credential: "openrelayproject"
-        }
     ]
 };
 
+const fetchPeerConfig = async () => {
+    try {
+        const response = await fetch(METERED_API_URL);
+        const iceServers = await response.json();
+        return { iceServers };
+    } catch (error) {
+        console.error('Failed to fetch TURN credentials, using fallback STUN only:', error);
+        return FALLBACK_CONFIG;
+    }
+};
+
 export const VideoProvider = ({ children, isSocketReady }) => {
+
     // --- UI STATES ---
-    const [callActive, setCallActive] = useState(false);
-    const [isMinimized, setIsMinimized] = useState(false);
-    // जहाँ आपने बाकी useRef लिखे हैं, वहाँ ये 2 और जोड़ लें:
-    const currentRoomRef = useRef(null);
-    const socketRef = useRef(null);
-    // --- MEDIA STATES ---
-    const [stream, setStream] = useState(null); 
-    const [isMicOn, setIsMicOn] = useState(true);
-    const [isVideoOn, setIsVideoOn] = useState(true);
-
-    const webcamStreamRef = useRef(null); 
-    const peersRef = useRef([]); 
-    const [peers, setPeers] = useState([]); 
-
-
-    // VideoContext.jsx के अंदर, जहाँ आपके बाकी states (जैसे callActive) हैं, वहाँ ये दो लाइनें डालें:
+    const [callActive, setCallActive]     = useState(false);
+    const [isMinimized, setIsMinimized]   = useState(false);
+    const [peers, setPeers]               = useState([]);
+    const [stream, setStream]             = useState(null);
+    const [isMicOn, setIsMicOn]           = useState(true);
+    const [isVideoOn, setIsVideoOn]       = useState(true);
     const [screenSharing, setScreenSharing] = useState(false);
-    const screenTrackRef = useRef(null); // स्क्रीन शेयर रोकने के लिए इसका रेफरेंस चाहिए
 
-    // ... (toggleAudio, toggleVideo के ठीक नीचे यह फंक्शन डालें) ...
+    // --- REFS ---
+    const webcamStreamRef  = useRef(null);
+    const peersRef         = useRef([]);
+    const currentRoomRef   = useRef(null);
+    const socketRef        = useRef(null);
+    const screenTrackRef   = useRef(null);
+    const screenSharingRef = useRef(false); // ✅ FIX: avoid stale closure in onended
+    const heartbeatRef     = useRef(null);  // ✅ FIX: Render WebSocket keep-alive
 
-    /**
-     * NATIVE SCREEN SHARE
-     */
-    const handleScreenShare = async () => {
-        // A. अगर पहले से स्क्रीन शेयर हो रही है, तो उसे बंद करो
-        if (screenSharing) {
-            // 1. ब्राउज़र की स्क्रीन कैप्चर बंद करो
-            if (screenTrackRef.current) screenTrackRef.current.stop();
-            screenTrackRef.current = null;
-            setScreenSharing(false);
+    // ------------------------------------------------------------------
+    // HELPERS
+    // ------------------------------------------------------------------
 
-            // 2. वापस अपना कैमरा (Webcam) उठाओ
-            const webcamTrack = webcamStreamRef.current.getVideoTracks()[0];
-            
-            // 3. सभी मौजूदा कनेक्शन्स में स्क्रीन की जगह वापस कैमरा डाल दो!
-            if (webcamTrack) {
-                peersRef.current.forEach(({ pc }) => {
-                    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-                    if (sender) sender.replaceTrack(webcamTrack); // मैजिक SWAP 🪄
-                });
+    /** Start/stop heartbeat to keep Render WebSocket alive (dies after ~30s idle) */
+    const startHeartbeat = useCallback((socket) => {
+        stopHeartbeat();
+        heartbeatRef.current = setInterval(() => {
+            if (socket && socket.connected) {
+                socket.emit('ping');
             }
+        }, 20000); // every 20 s
+    }, []);
 
-            // 4. अपने UI को वापस कैमरा दिखाओ
-            setStream(webcamStreamRef.current);
-        } 
-        // B. अगर स्क्रीन शेयर चालू करनी है
-        else {
-            try {
-                // 1. ब्राउज़र से स्क्रीन शेयर की परमिशन मांगो
-                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                const screenTrack = screenStream.getVideoTracks()[0];
-                screenTrackRef.current = screenTrack;
-                setScreenSharing(true);
-
-                // IMPORTANT: अगर यूज़र ब्राउज़र वाले "Stop Sharing" पॉपअप बटन को दबा दे
-                screenTrack.onended = () => {
-                    handleScreenShare(); // वापस कैमरा चालू करने वाला लॉजिक चला दो
-                };
-
-                // 2. सभी मौजूदा कनेक्शन्स में कैमरे की जगह स्क्रीन का वीडियो डाल दो!
-                peersRef.current.forEach(({ pc }) => {
-                    const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-                    if (sender) sender.replaceTrack(screenTrack); // मैजिक SWAP 🪄
-                });
-
-                // 3. अपने UI को अपडेट करो (ताकि आपको भी अपनी स्क्रीन दिखे + आपकी आवाज़ चालू रहे)
-                const audioTrack = webcamStreamRef.current.getAudioTracks()[0];
-                const localPreview = new MediaStream([screenTrack]);
-                if (audioTrack) localPreview.addTrack(audioTrack);
-                
-                setStream(localPreview);
-
-            } catch (error) {
-                console.error("Screen Share cancelled or failed", error);
-            }
+    const stopHeartbeat = useCallback(() => {
+        if (heartbeatRef.current) {
+            clearInterval(heartbeatRef.current);
+            heartbeatRef.current = null;
         }
-    };
-    /**
-     * FEATURE 1: Get Camera & Mic Permissions
-     */
-    const startLocalStream = async () => {
+    }, []);
+
+    /** Remove ALL socket listeners added during a session */
+    const removeSocketListeners = useCallback((socket) => {
+        if (!socket) return;
+        socket.off('all-users');
+        socket.off('incoming-call');
+        socket.off('call-answered');
+        socket.off('incoming-ice-candidate');
+        socket.off('user-left');
+        socket.off('pong');
+    }, []);
+
+    // ------------------------------------------------------------------
+    // FEATURE 1: Get Camera & Mic
+    // ------------------------------------------------------------------
+    const startLocalStream = useCallback(async () => {
         try {
-            const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-                video: true, 
-                audio: true 
+            const mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true
             });
-            
             setStream(mediaStream);
-            webcamStreamRef.current = mediaStream; 
-            
+            webcamStreamRef.current = mediaStream;
             return mediaStream;
         } catch (error) {
-            console.error("Camera Error:", error);
-            return null; 
+            console.error('Camera Error:', error);
+            return null;
         }
-    };
+    }, []);
 
-    /**
-     * FEATURE 2 & 3: Toggle Audio / Video
-     */
-    const toggleAudio = () => {
+    // ------------------------------------------------------------------
+    // FEATURE 2 & 3: Toggle Audio / Video
+    // ------------------------------------------------------------------
+    const toggleAudio = useCallback(() => {
         if (webcamStreamRef.current) {
             const audioTrack = webcamStreamRef.current.getAudioTracks()[0];
             if (audioTrack) {
-                audioTrack.enabled = !audioTrack.enabled; 
-                setIsMicOn(audioTrack.enabled); 
+                audioTrack.enabled = !audioTrack.enabled;
+                setIsMicOn(audioTrack.enabled);
             }
         }
-    };
+    }, []);
 
-    const toggleVideo = () => {
+    const toggleVideo = useCallback(() => {
         if (webcamStreamRef.current) {
             const videoTrack = webcamStreamRef.current.getVideoTracks()[0];
             if (videoTrack) {
@@ -384,214 +116,163 @@ export const VideoProvider = ({ children, isSocketReady }) => {
                 setIsVideoOn(videoTrack.enabled);
             }
         }
-    };
+    }, []);
 
-    /**
-     * NATIVE WEBRTC: Create a new pipeline
-     * ✅ FIX: Added 'socket' as the 3rd parameter
-     */
-  const createPeerConnection = (targetSocketId, myStream, socket) => {
-        const pc = new RTCPeerConnection(peerConfiguration);
-        
-        // ✅ NEW: इस कनेक्शन के लिए एक Waiting Room (Queue) बनायें
-        pc.candidateQueue = []; 
+    // ------------------------------------------------------------------
+    // SCREEN SHARE  ✅ FIX: uses ref to avoid stale closure
+    // ------------------------------------------------------------------
+    const handleScreenShare = useCallback(async () => {
 
-        if (myStream) {
-            myStream.getTracks().forEach(track => {
-                pc.addTrack(track, myStream);
-            });
+        // A. STOP screen share
+        if (screenSharingRef.current) {
+            if (screenTrackRef.current) screenTrackRef.current.stop();
+            screenTrackRef.current = null;
+            screenSharingRef.current = false;
+            setScreenSharing(false);
+
+            const webcamTrack = webcamStreamRef.current?.getVideoTracks()[0];
+            if (webcamTrack) {
+                peersRef.current.forEach(({ pc }) => {
+                    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) sender.replaceTrack(webcamTrack);
+                });
+            }
+            setStream(webcamStreamRef.current);
+            return;
         }
 
-        // pc.ontrack = (event) => {
-        //     console.log("Remote Video Received from:", targetSocketId);
-        //     const remoteStream = event.streams[0];
-            
-        //     setPeers(prevPeers => {
-        //         const existingPeer = prevPeers.find(p => p.peerId === targetSocketId);
-        //         if (existingPeer) {
-        //             return prevPeers.map(p => 
-        //                 p.peerId === targetSocketId ? { ...p, stream: remoteStream } : p
-        //             );
-        //         } else {
-        //             return [...prevPeers, { peerId: targetSocketId, pc: pc, stream: remoteStream }];
-        //         }
-        //     });
-        // };
+        // B. START screen share
+        try {
+            const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const screenTrack  = screenStream.getVideoTracks()[0];
+            screenTrackRef.current   = screenTrack;
+            screenSharingRef.current = true;   // ✅ update ref first
+            setScreenSharing(true);
+
+            // ✅ FIX: onended reads from ref — no stale closure
+            screenTrack.onended = () => {
+                if (screenSharingRef.current) {
+                    handleScreenShare();
+                }
+            };
+
+            peersRef.current.forEach(({ pc }) => {
+                const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+                if (sender) sender.replaceTrack(screenTrack);
+            });
+
+            const audioTrack   = webcamStreamRef.current?.getAudioTracks()[0];
+            const localPreview = new MediaStream([screenTrack]);
+            if (audioTrack) localPreview.addTrack(audioTrack);
+            setStream(localPreview);
+
+        } catch (error) {
+            console.error('Screen Share cancelled or failed', error);
+        }
+    }, []); // no deps needed — everything via refs
+
+    // ------------------------------------------------------------------
+    // WEBRTC: Create peer connection  ✅ fetches fresh TURN creds each time
+    // ------------------------------------------------------------------
+    const createPeerConnection = useCallback(async (targetSocketId, myStream, socket) => {
+        const config = await fetchPeerConfig();
+        const pc = new RTCPeerConnection(config);
+        pc.candidateQueue = [];
+
+        if (myStream) {
+            myStream.getTracks().forEach(track => pc.addTrack(track, myStream));
+        }
 
         pc.ontrack = (event) => {
-            console.log("Remote Video Received!");
             const remoteStream = event.streams[0];
-            
-            // ✅ FIX: अब हम सिर्फ स्ट्रीम अपडेट कर रहे हैं, नया डब्बा नहीं बना रहे।
-            setPeers(prevPeers => prevPeers.map(p => 
+            setPeers(prev => prev.map(p =>
                 p.peerId === targetSocketId ? { ...p, stream: remoteStream } : p
             ));
         };
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                socket.emit("ice-candidate", { 
-                    targetId: targetSocketId, 
-                    candidate: event.candidate 
+                socket.emit('ice-candidate', {
+                    targetId: targetSocketId,
+                    candidate: event.candidate
                 });
             }
         };
 
+        // ✅ Optional: log connection state changes for debugging
+        pc.onconnectionstatechange = () => {
+            console.log(`[WebRTC] ${targetSocketId} → ${pc.connectionState}`);
+        };
+
         return pc;
-    };
+    }, []);
 
-    /**
-     * FEATURE 4: THE HANDSHAKE (Signaling)
-     */
-    // const joinRoom = async (channelId, socket) => {
-    //     const myStream = await startLocalStream();
-    //     if (!myStream) {
-    //         alert("Camera needed to join!");
-    //         return; 
-    //     }
-
-    //     setCallActive(true);
-    //     socket.emit("join-room", channelId);
-
-    //     socket.off("all-users");
-    //     socket.off("incoming-call");
-    //     socket.off("call-answered");
-    //     socket.off("incoming-ice-candidate");
-
-    //     socket.on("all-users", (existingUsers) => {
-    //         existingUsers.forEach(async (targetSocketId) => {
-    //             // ✅ FIX: Passing 'socket' to createPeerConnection
-    //             const pc = createPeerConnection(targetSocketId, myStream, socket);
-    //             peersRef.current.push({ peerId: targetSocketId, pc });
-
-    //             const offer = await pc.createOffer();
-    //             await pc.setLocalDescription(offer); 
-
-    //             socket.emit("call-user", { targetId: targetSocketId, offer });
-    //         });
-    //     });
-
-    //     // ==========================================
-    //     // SCENARIO B: You are ALREADY in the room, and someone calls YOU.
-    //     // ==========================================
-    //     socket.on("incoming-call", async ({ callerId, offer }) => {
-    //         const pc = createPeerConnection(callerId, myStream, socket);
-    //         peersRef.current.push({ peerId: callerId, pc });
-
-    //         await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
-    //         const answer = await pc.createAnswer();
-    //         await pc.setLocalDescription(answer);
-
-    //         socket.emit("call-accepted", { targetId: callerId, answer });
-
-    //         // ✅ QUEUE FIX: अगर कोई नेटवर्क पाथ पहले आ गया था, तो अब उसे प्रोसेस करो
-    //         while(pc.candidateQueue && pc.candidateQueue.length > 0) {
-    //             await pc.addIceCandidate(pc.candidateQueue.shift());
-    //         }
-    //     });
-
-    //     // ==========================================
-    //     // SCENARIO C: The guy you called answered your call!
-    //     // ==========================================
-    //     socket.on("call-answered", async ({ answererId, answer }) => {
-    //         const peerObj = peersRef.current.find(p => p.peerId === answererId);
-    //         if (peerObj) {
-    //             await peerObj.pc.setRemoteDescription(new RTCSessionDescription(answer));
-                
-    //             // ✅ QUEUE FIX: ट्रैक तैयार है, अब पेंडिंग पाथ्स को जोड़ दो
-    //             while(peerObj.pc.candidateQueue && peerObj.pc.candidateQueue.length > 0) {
-    //                 await peerObj.pc.addIceCandidate(peerObj.pc.candidateQueue.shift());
-    //             }
-    //         }
-    //     });
-
-    //     // ==========================================
-    //     // THE FINAL PIECE: Receiving the Network Path (ICE Candidate)
-    //     // ==========================================
-    //     socket.on("incoming-ice-candidate", async ({ senderId, candidate }) => {
-    //         const peerObj = peersRef.current.find(p => p.peerId === senderId);
-    //         if (peerObj) {
-    //             const iceCandidate = new RTCIceCandidate(candidate);
-                
-    //             // ✅ QUEUE FIX: अगर WebRTC पाइप पूरी तरह तैयार है, तो सीधा जोड़ो
-    //             if (peerObj.pc.remoteDescription) {
-    //                 await peerObj.pc.addIceCandidate(iceCandidate);
-    //             } else {
-    //                 // अगर तैयार नहीं है, तो उसे Waiting Room (Queue) में डाल दो!
-    //                 peerObj.pc.candidateQueue.push(iceCandidate);
-    //             }
-    //         }
-    //     });
-    // };
-
-    const joinRoom = async (channelId, socket) => {
+    // ------------------------------------------------------------------
+    // FEATURE 4: JOIN ROOM
+    // ------------------------------------------------------------------
+    const joinRoom = useCallback(async (channelId, socket) => {
         const myStream = await startLocalStream();
         if (!myStream) {
-            alert("Camera needed to join!");
-            return; 
+            alert('Camera/Mic permission is needed to join!');
+            return;
         }
 
-        // ✅ Refs सेव कर लें ताकि leaveCall इस्तेमाल कर सके
         currentRoomRef.current = channelId;
-        socketRef.current = socket;
+        socketRef.current      = socket;
 
         setCallActive(true);
-        socket.emit("join-room", channelId);
 
-        // पुराने Listeners क्लीन करें
-        socket.off("all-users");
-        socket.off("incoming-call");
-        socket.off("call-answered");
-        socket.off("incoming-ice-candidate");
-        socket.off("user-left"); // ✅ नया क्लीनअप
+        // ✅ FIX: clean up any leftover listeners before adding new ones
+        removeSocketListeners(socket);
 
-        // 1. You are the new guy joining
-        socket.on("all-users", (existingUsers) => {
+        socket.emit('join-room', channelId);
+
+        // ✅ FIX: start heartbeat so Render doesn't kill the WS
+        startHeartbeat(socket);
+        socket.on('pong', () => {}); // acknowledge server pong
+
+        // 1. You are the new joiner — call everyone already in the room
+        socket.on('all-users', (existingUsers) => {
             existingUsers.forEach(async (targetSocketId) => {
-                const pc = createPeerConnection(targetSocketId, myStream, socket);
+                const pc = await createPeerConnection(targetSocketId, myStream, socket);
                 peersRef.current.push({ peerId: targetSocketId, pc });
-
-                // ✅ BLACK SCREEN FIX: वीडियो आने से पहले ही स्क्रीन पर एक Loading/Blank डब्बा बना दो
                 setPeers(prev => [...prev, { peerId: targetSocketId, stream: null }]);
 
                 const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer); 
-                socket.emit("call-user", { targetId: targetSocketId, offer });
+                await pc.setLocalDescription(offer);
+                socket.emit('call-user', { targetId: targetSocketId, offer });
             });
         });
 
-        // 2. Someone calls YOU
-        socket.on("incoming-call", async ({ callerId, offer }) => {
-            const pc = createPeerConnection(callerId, myStream, socket);
+        // 2. Someone new calls YOU
+        socket.on('incoming-call', async ({ callerId, offer }) => {
+            const pc = await createPeerConnection(callerId, myStream, socket);
             peersRef.current.push({ peerId: callerId, pc });
-
-            // ✅ BLACK SCREEN FIX: वीडियो आने से पहले ही डब्बा बना दो
             setPeers(prev => [...prev, { peerId: callerId, stream: null }]);
 
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            socket.emit("call-accepted", { targetId: callerId, answer });
+            socket.emit('call-accepted', { targetId: callerId, answer });
 
-            while(pc.candidateQueue && pc.candidateQueue.length > 0) {
+            while (pc.candidateQueue?.length > 0) {
                 await pc.addIceCandidate(pc.candidateQueue.shift());
             }
         });
 
-        // 3. They answered your call
-        socket.on("call-answered", async ({ answererId, answer }) => {
+        // 3. They answered YOUR call
+        socket.on('call-answered', async ({ answererId, answer }) => {
             const peerObj = peersRef.current.find(p => p.peerId === answererId);
             if (peerObj) {
                 await peerObj.pc.setRemoteDescription(new RTCSessionDescription(answer));
-                while(peerObj.pc.candidateQueue && peerObj.pc.candidateQueue.length > 0) {
+                while (peerObj.pc.candidateQueue?.length > 0) {
                     await peerObj.pc.addIceCandidate(peerObj.pc.candidateQueue.shift());
                 }
             }
         });
 
-        // 4. ICE Candidates
-        socket.on("incoming-ice-candidate", async ({ senderId, candidate }) => {
+        // 4. ICE candidates
+        socket.on('incoming-ice-candidate', async ({ senderId, candidate }) => {
             const peerObj = peersRef.current.find(p => p.peerId === senderId);
             if (peerObj) {
                 const iceCandidate = new RTCIceCandidate(candidate);
@@ -603,87 +284,73 @@ export const VideoProvider = ({ children, isSocketReady }) => {
             }
         });
 
-        // ==========================================
-        // ✅ 5. GHOST USER FIX: जब कोई बीच में कॉल काट दे
-        // ==========================================
-        socket.on("user-left", (leftUserId) => {
-            console.log("User left the meeting:", leftUserId);
-            
-            // 1. उसका कनेक्शन (पाइप) बंद करो
+        // 5. Someone left mid-call
+        socket.on('user-left', (leftUserId) => {
             const peerObj = peersRef.current.find(p => p.peerId === leftUserId);
-            if (peerObj && peerObj.pc) peerObj.pc.close();
-
-            // 2. उसे अपने Refs से हटाओ
+            if (peerObj?.pc) peerObj.pc.close();
             peersRef.current = peersRef.current.filter(p => p.peerId !== leftUserId);
-
-            // 3. उसे अपनी स्क्रीन (State) से हटाओ
             setPeers(prev => prev.filter(p => p.peerId !== leftUserId));
         });
-    };
-    /**
-     * CLEANUP: Safely end the call without crashing React
-     */
-    // const leaveCall = () => {
-    //     // 1. Safely turn off the Camera/Mic hardware
-    //     if (webcamStreamRef.current) {
-    //         webcamStreamRef.current.getTracks().forEach(track => track.stop());
-    //         webcamStreamRef.current = null;
-    //     }
 
-    //     // 2. Safely close all WebRTC pipes
-    //     peersRef.current.forEach(peerObj => {
-    //         if (peerObj.pc) {
-    //             peerObj.pc.close();
-    //         }
-    //     });
+    }, [startLocalStream, createPeerConnection, removeSocketListeners, startHeartbeat]);
 
-    //     // 3. Clear the arrays and states
-    //     peersRef.current = [];
-    //     setPeers([]);
-    //     setStream(null);
-    //     setIsMinimized(false);
-    //     setCallActive(false); // This will safely return you to the Channel page
-
-    //     // Optional but recommended: Tell the Node server you left
-    //     // socket.emit("leave-room", channelId); 
-    // };
-
-    // ✅ FIX: Added 'peers' and 'joinRoom' inside the value object
-    
-    const leaveCall = () => {
+    // ------------------------------------------------------------------
+    // LEAVE CALL  ✅ FIX: full cleanup including listeners + heartbeat
+    // ------------------------------------------------------------------
+    const leaveCall = useCallback(() => {
+        // 1. Stop camera/mic
         if (webcamStreamRef.current) {
-            webcamStreamRef.current.getTracks().forEach(track => track.stop());
+            webcamStreamRef.current.getTracks().forEach(t => t.stop());
             webcamStreamRef.current = null;
         }
+
+        // 2. Stop screen share if active
         if (screenTrackRef.current) {
             screenTrackRef.current.stop();
+            screenTrackRef.current   = null;
+            screenSharingRef.current = false;
         }
 
-        peersRef.current.forEach(peerObj => {
-            if (peerObj.pc) peerObj.pc.close();
-        });
-
+        // 3. Close all WebRTC pipes
+        peersRef.current.forEach(({ pc }) => { if (pc) pc.close(); });
         peersRef.current = [];
+
+        // 4. ✅ FIX: Remove all socket listeners to prevent memory leaks / re-fire
+        removeSocketListeners(socketRef.current);
+
+        // 5. ✅ FIX: Stop heartbeat
+        stopHeartbeat();
+
+        // 6. Tell server we left
+        if (socketRef.current && currentRoomRef.current) {
+            socketRef.current.emit('leave-room', currentRoomRef.current);
+        }
+
+        // 7. Reset all state
         setPeers([]);
         setStream(null);
         setIsMinimized(false);
         setCallActive(false);
         setScreenSharing(false);
+        currentRoomRef.current = null;
+        socketRef.current      = null;
+    }, [removeSocketListeners, stopHeartbeat]);
 
-        // ✅ GHOST FIX: सर्वर को बताओ कि मैं रूम छोड़ रहा हूँ
-        if (socketRef.current && currentRoomRef.current) {
-            socketRef.current.emit("leave-room", currentRoomRef.current);
-        }
-    };
-    
+    // ------------------------------------------------------------------
     return (
         <VideoContext.Provider value={{
-            callActive, setCallActive,
-            isMinimized, setIsMinimized,
-            stream, peers,
-            startLocalStream, joinRoom,leaveCall, 
-            toggleAudio, toggleVideo, 
-            isMicOn, isVideoOn, isSocketReady,handleScreenShare,screenSharing
+            callActive,   setCallActive,
+            isMinimized,  setIsMinimized,
+            stream,       peers,
+            isMicOn,      isVideoOn,
+            screenSharing,
+            isSocketReady,
+            startLocalStream,
+            joinRoom,
+            leaveCall,
+            toggleAudio,
+            toggleVideo,
+            handleScreenShare,
         }}>
             {children}
         </VideoContext.Provider>

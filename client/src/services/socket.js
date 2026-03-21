@@ -29,7 +29,7 @@ export const getSocket = () => {
     if (!socket) {
         // Console warn hata diya taaki unnecessary logs na aayein
         return null;
-    }
+    } 
     return socket;
 };
 

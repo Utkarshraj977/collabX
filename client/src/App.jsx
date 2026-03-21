@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { loadUser } from "./features/auth/authSlice";
 import AppRoutes from "./routes/AppRoutes";
 import { Toaster } from 'react-hot-toast';
-import { connectSocket, disconnectSocket } from "./services/socket"; // Import fix
+import { connectSocket, disconnectSocket } from "./services/socket"; 
 
 import { VideoProvider } from "./components/VideoContext1";
 import CallOverlay1 from "./components/CallOverlay1";
@@ -14,7 +14,7 @@ export default function App() {
   const { loading, user } = useSelector((state) => state.auth);
 
   // 1. User Load
-  useEffect(() => {
+  useEffect(() => { 
     dispatch(loadUser());
   }, [dispatch]);
 
