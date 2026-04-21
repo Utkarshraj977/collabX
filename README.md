@@ -320,12 +320,15 @@ Use generated public URL in GitHub webhook settings.
 
 # 📸 Screenshots
 
-Add screenshots here:
+
 
 ```md
-![Dashboard](./screenshots/dashboard.png)
-![Chat](./screenshots/chat.png)
-![Meet](./screenshots/meet.png)
+<img width="1111" height="737" alt="Screenshot 2026-02-20 031928" src="https://github.com/user-attachments/assets/611ed928-effb-426c-bbbd-35ad5e04f28b" />
+<img width="1916" height="860" alt="Screenshot 2026-02-20 023448" src="https://github.com/user-attachments/assets/26b10ceb-e4b2-4560-b398-03bc2b2cc31d" />
+
+<img width="1888" height="868" alt="Screenshot 2026-02-20 023252" src="https://github.com/user-attachments/assets/fa9826b2-57c1-4863-916f-89ee584b231b" />
+
+
 ```
 
 ---
