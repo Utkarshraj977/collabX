@@ -5,7 +5,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "nodemon -r dotenv/config server.js"
   },
   "keywords": [],
@@ -30,5 +31,8 @@
     "nodemon": "^3.1.11",
     "rate-limit-redis": "^4.3.1",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7"
   }
 }

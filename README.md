@@ -177,6 +177,20 @@ npm install
 npm run dev
 ```
 
+## Run Tests
+
+The backend and frontend test suites are isolated from production services. They do not require MongoDB, Redis, Cloudinary, or other external credentials.
+
+```bash
+cd server
+npm test
+
+cd ../client
+npm test
+```
+
+Use `npm run test:watch` inside either directory while developing.
+
 ---
 
 ## Redis (if running locally)
@@ -375,4 +389,3 @@ MIT License
 ---
 
 ## ⭐ If you found this project interesting, consider starring the repository.
-
